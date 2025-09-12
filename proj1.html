@@ -493,7 +493,24 @@
           Many outputs still show colored outlines (red, green, or blue) around edges, especially in high-contrast regions such as clothing, trees, and buildings.  
           <em>Future Fix:</em> This could be reduced by refining the search with sub-pixel alignment or gradient-based optimization, rather than relying solely on integer pixel shifts.
         </li>
+        <h3 class="text-xl font-medium mb-3"> Particular Image Problem Areas: The Emir </h3>
+        <ul class="list-disc list-inside ml-6 text-gray-800 space-y-1">
+          <li><strong>Different brightness per channel:</strong> the robe is very bright in Red but not in Blue/Green, so raw pixel scores get confused.</li>
+          <li><strong>Strong borders/artifacts:</strong> thick edges around the scan pull the alignment toward the wrong shift.</li>
+          <li><strong>Busy patterns:</strong> lots of fine, repetitive details create false matches, especially at the coarser pyramid levels.</li>
+        </ul>
       </ul>
+
+      <section>
+        <h3 class="text-xl font-medium mb-3">How I Tried to Fix <em>Emir</em></h3>
+        <ul class="list-disc list-inside ml-6 text-gray-800 space-y-1">
+          <li><strong>Scored edges, not raw pixels:</strong> used gradient-based NCC so brightness differences don’t mislead the match.</li>
+          <li><strong>Trimmed borders more:</strong> increased border trim (≈8% -> 10%) to ignore black frames and scan artifacts.</li>
+          <li><strong>Stronger pyramid search:</strong> added a level and used a slightly larger search window at each scale.</li>
+        </ul>
+        <p class="text-sm text-gray-600 mt-2">Together, these fixes made a small, but noticeable difference.</p>
+      </section>
+
     </section>
 
     <!-- Bells and Whistles -->
