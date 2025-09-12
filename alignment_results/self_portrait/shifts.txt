@@ -1,0 +1,2 @@
+Best Red Shifts: (37, 176)
+Best Green Shifts: (29, 79)

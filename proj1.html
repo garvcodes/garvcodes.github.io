@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS180 Project 1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      /* Fit images to page width */
+      img {
+        max-width: 100%;
+        height: auto;
+        page-break-inside: avoid; /* don't split images */
+        break-inside: avoid;
+      }
+    
+      /* Keep sections together */
+      section, div {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+    
+      /* Remove unnecessary extras when printing */
+      header, footer, nav {
+        display: none;
+      }
+    
+      body {
+        background: white; /* remove gray backgrounds */
+      }
+    }
+    </style>    
+</head>
+<body class="bg-gray-100 font-sans">
+  <!-- Header with Navigation -->
+  <header class="bg-gradient-to-r from-indigo-500 to-blue-600 text-yellow-500 p-6 shadow-md flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+        <img src="photos/seal.png" alt="College Seal" class="w-16 h-16 rounded">
+        <h1 class="text-2xl font-bold">CS180 Class Repository - Garv Goswami</h1>
+      </div>
+    <nav>
+      <ul class="flex space-x-6 text-lg">
+        <li><a href="index.html" class="hover:underline">Home</a></li>
+        <li><a href="proj0.html" class="hover:underline">Project 0</a></li>
+        <li><a href="proj1.html" class="hover:underline font-bold">Project 1</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-5xl mx-auto p-6 space-y-12">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Project 1: Colorizing the Prokudin-Gorskii Photo Collection</h2>
+
+    <!-- Overview -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Overview</h3>
+      <p>
+        This project aligns digitized glass plate negatives from Sergei Mikhailovich Prokudin-Gorskii into modern color images. 
+        Each input file contains three grayscale channels stacked vertically in the order Blue, Green, Red, an example shown below:
+      
+        <figure class="text-center">
+          <img src="../Project1/cs180_proj1_data/cathedral.jpg" alt="Cathedral" class="w-52 mx-auto">
+          <figcaption class="text-sm text-gray-600 mt-2">
+            Cathedral — Prokudin-Gorskii collection
+          </figcaption>
+        </figure>
+
+        My task was to align the Green and Red channels to the Blue channel to produce sharp RGB results.
+      </p>
+    </section>
+
+    <!-- Approach -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Approach</h3>
+      <p>
+        I implemented both a single-scale exhaustive search and a pyramid-based approach for high-resolution images. 
+        The difference bewteen these two approaches is conceptually simple. The single-scale search is a simple iterative search that
+        aligns one layer to another in variable step size, finally reutrning the alignment that produced the 
+        best score for some predefined metric.<br>
+        <br>
+        The pyramid-based search is pretty much the same thing and does indeed use the simple iterative search in it's execution, but 
+        we instead optimize for large images. We downscale and convolute images repeatedly, gaining a collection of
+        images that are decreasingly resolutioned than the original. The iterative alignments for those downscaled and blurred 
+        images are then used to define the search neighborhoods as we move up the pyramid, decreasing the necessary search space.
+  
+        
+        To evaluate alignments, I used two metrics: 
+        <strong>L2 norm</strong> (pixel-wise difference, smaller is better) and 
+        <strong>Normalized Cross Correlation (NCC)</strong> (dot product of normalized, zero-centered images, larger is better).
+      </p>
+      <p class="mt-2">
+        Since <code>np.roll</code> wraps pixels around, I added helper functions to compute metrics only over true overlapping regions. 
+        For large .tif images, I used a Gaussian pyramid: aligning at coarse scale and then refining at finer scales.
+      </p>
+    </section>
+
+<!-- Function Explanations -->
+<section>
+  <h3 class="text-xl font-medium mb-3">Function Explanations</h3>
+  <ul class="list-disc list-inside ml-6 space-y-3">
+    Below I present each of the main scoring metric functions that I used and implemented in this project:<br>
+    <li><code>l2_norm(layer1, layer2)</code>  
+      Computes the Euclidean distance (sum of squared pixel differences, square-rooted) between two image layers.  
+      <strong>Purpose:</strong> Scoring metric for alignment; a lower value indicates better similarity.</li>
+
+    <li><code>norm(x)</code>  
+      A helper that computes the L2 magnitude of an array (√(Σ x²)).  
+      <strong>Purpose:</strong> Used to normalize arrays inside NCC so that dot products compare direction instead of magnitude.</li>
+
+    <li><code>ncc(layer1, layer2, eps)</code>  
+      Normalized Cross Correlation. Zero-centers both layers (subtract mean), flattens them with <code>ravel()</code>, and takes a dot product.  
+      <strong>Purpose:</strong> Returns a similarity score where higher is better. The small <code>eps</code> prevents divide-by-zero if a channel is flat.</li>
+      <br>
+      Here, I talk more about the <text class=""font-bold">Helper Functions that I implemented:</text>
+      <br>
+
+    <li><code>_overlap_slices(shape, dx, dy)</code>  
+      Given a shift <code>(dx, dy)</code>, computes the slice indices for the true overlap region between two images.  
+      <strong>Purpose:</strong> Prevents wrap-around artifacts from <code>np.roll</code> by only comparing genuine overlapping pixels.</li>
+
+    <li><code>_score_on_overlap(A, B, dx, dy, metric, trim_frac)</code>  
+      Another helper that uses <code>_overlap_slices</code> to extract overlap regions, trims away borders by a fraction (to reduce edge artifacts), and evaluates with the given metric.  
+      <strong>Purpose:</strong> Produces a reliable score for how well two shifted channels align.</li>
+
+      <br>
+      Here, I talk more about the <span class="font-bold">Iterative Alignment Functions that I implemented:</span>
+      <br>
+      
+      <li>
+        <code>iteratively_align_to_b(r, g, b, step_size, alignment_fxn, dx_init_r=0, dy_init_r=0, dx_init_g=0, dy_init_g=0, search_radius=None)</code><br>
+        
+        <strong>Purpose:</strong>  
+        Performs brute-force alignment of the Red and Green channels to the Blue channel, exploring a search window of pixel shifts and choosing the displacements that maximize similarity according to the chosen metric.<br><br>
+      
+        <strong>Parameters:</strong>
+        <ul class="list-disc list-inside ml-6">
+          <li><code>r, g, b</code> – 2D arrays representing the Red, Green, and Blue channels (grayscale slices extracted from the stacked input).</li>
+          <li><code>step_size</code> – Pixel step size for searching. A larger step size reduces runtime but sacrifices precision; a smaller step size improves precision but is slower.</li>
+          <li><code>alignment_fxn</code> – Function used to evaluate similarity (e.g., <code>l2_norm</code> or <code>ncc</code>). Determines what “best alignment” means.</li>
+          <li><code>dx_init_r, dy_init_r</code> – Initial horizontal and vertical shift guesses for aligning the Red channel to Blue. Defaults to <code>0</code>, but can be passed down from pyramid search to refine alignment at higher resolutions.</li>
+          <li><code>dx_init_g, dy_init_g</code> – Same as above, but for the Green channel relative to Blue.</li>
+          <li><code>search_radius</code> – Maximum number of pixels (in each direction) to search around the initial guess. If <code>None</code>, defaults to <code>max(r.shape)//15</code>, scaling with image size.</li>
+        </ul><br>
+      
+        <strong>How it works:</strong>
+        <ul class="list-disc list-inside ml-6">
+          <li>For both Red and Green channels, the function iterates over all candidate displacements within the window defined by the initial guesses and <code>search_radius</code>.</li>
+          <li>Each candidate shift is applied with <code>np.roll</code>, and the overlapping region with Blue is extracted.</li>
+          <li>The chosen <code>alignment_fxn</code> (e.g. <code>ncc</code> or <code>l2_norm</code>) computes a similarity score.</li>
+          <li>The displacement producing the best score is recorded for that channel.</li>
+        </ul><br>
+      
+        <strong>Pyramid integration:</strong>  
+        The <code>dx_init_r, dy_init_r, dx_init_g, dy_init_g</code> parameters make the function reusable in a multi-scale pyramid search: alignments at coarse scales are passed in as initial guesses at finer scales, reducing the search space and improving efficiency.<br><br>
+      
+        <strong>Returns:</strong>
+        <ul class="list-disc list-inside ml-6">
+          <li>The aligned RGB image <code>im_out</code>, formed by stacking the best-shifted Red and Green with the original Blue.</li>
+          <li>Shift vectors for both Red (<code>(dx_r, dy_r)</code>) and Green (<code>(dx_g, dy_g)</code>) relative to Blue.</li>
+        </ul>
+      </li> <br>
+      <br>
+      <br>
+      Now, I talk more about the <span class="font-bold">Pyramid-related code that I implemented:</span>
+      <br>
+
+    <li><code>pyramid_convoluter(image)</code>  
+      Applies a Gaussian blur with a 3×3 kernel to an image.  
+      <strong>Purpose:</strong> Smooths out noise before downsampling in the pyramid, preventing aliasing.</li>
+
+    <li><code>downsample(image)</code>  
+      Reduces resolution by selecting every other pixel in both dimensions.  
+      <strong>Purpose:</strong> Creates smaller versions of the image for coarse alignment.</li>
+
+    <li><code>pyramid_level_creator(image, levels)</code>  
+      Builds a Gaussian pyramid by repeatedly blurring and downsampling.  
+      <strong>Purpose:</strong> Produces multiple resolutions of the image for efficient coarse-to-fine alignment and stores them in an array to use for the next function.</li>
+
+      <li>
+        <code>pyramid_align_to_b(r, g, b, levels, alignment_fxn, step_size=1, pyramid_search_radius=5)</code><br>
+      
+        <strong>Purpose:</strong>  
+        Aligns the Red and Green channels to the Blue channel using a multi-resolution (pyramid) approach. This method is much faster and more robust for high-resolution images than single-scale exhaustive search.<br><br>
+      
+        <strong>Parameters:</strong>
+        <ul class="list-disc list-inside ml-6">
+          <li><code>r, g, b</code> – 2D arrays representing the Red, Green, and Blue channels.</li>
+          <li><code>levels</code> – Number of pyramid levels to create. Higher values give more coarse-to-fine refinement, but increase preprocessing cost.</li>
+          <li><code>alignment_fxn</code> – Similarity metric (<code>l2_norm</code> or <code>ncc</code>) used in <code>iteratively_align_to_b</code> to evaluate alignment quality.</li>
+          <li><code>step_size</code> – Pixel step size passed down to <code>iteratively_align_to_b</code>. Controls how finely each level’s search space is explored.</li>
+          <li><code>pyramid_search_radius</code> – Search radius (in pixels) at each pyramid level. Because the alignment is initialized from coarser levels, this radius can be relatively small.</li>
+        </ul><br>
+      
+        <strong>How it works:</strong>
+        <ol class="list-decimal list-inside ml-6">
+          <li><em>Pyramid construction:</em> Each channel (<code>r, g, b</code>) is passed to <code>pyramid_level_creator</code>, which repeatedly downsamples and blurs the image to produce a stack of progressively lower-resolution versions. The coarsest (smallest) image is at the highest pyramid level.</li>
+          
+          <li><em>Initialization:</em> At the coarsest pyramid level, shifts for Red and Green are initialized to (0,0). This provides a starting point for alignment.</li>
+          
+          <li><em>Coarse-to-fine alignment:</em> The algorithm iterates from coarse levels → fine levels (looping <code>reversed(range(levels))</code>):  
+            <ul class="list-disc list-inside ml-6">
+              <li>At each level, the downsampled Red and Green are aligned to the downsampled Blue using <code>iteratively_align_to_b</code>.</li>
+              <li>The shifts found at this level are multiplied by 2 (<code>shift * 2</code>) before being passed as <code>dx_init</code>/<code>dy_init</code> to the next level. This scaling accounts for the doubled resolution at finer levels.</li>
+              <li>Because the initialization is already close to the true solution, only a small search radius (<code>pyramid_search_radius</code>) is needed at each level.</li>
+            </ul>
+          </li>
+          
+          <li><em>Final refinement:</em> After reaching the full-resolution images, one last call to <code>iteratively_align_to_b</code> refines the alignment using the accumulated shifts as initialization. This ensures sub-pixel-accurate results at the original image size.</li>
+        </ol><br>
+      
+        <strong>Returns:</strong>
+        <ul class="list-disc list-inside ml-6">
+          <li><code>final_img</code> – The aligned composite RGB image, built by stacking the best-shifted Red and Green with the Blue channel.</li>
+          <li><code>shift_r</code> – Final displacement vector (<code>dx_r, dy_r</code>) for Red relative to Blue.</li>
+          <li><code>shift_g</code> – Final displacement vector (<code>dx_g, dy_g</code>) for Green relative to Blue.</li>
+        </ul><br>
+      
+        <strong>Why pyramid alignment works:</strong>  
+        Instead of searching the full-resolution image directly (which would require exploring thousands of candidate shifts), pyramid alignment solves the problem at coarse scales first. Each coarse solution provides a strong initialization for the next finer scale, dramatically reducing the search space. This makes alignment both faster and more reliable for very large images.
+      </li>
+
+      <br>
+      <br>
+      Now, I talk more about the <span class="font-bold">basic cropping code that I implemented:</span>
+      <br>
+
+    <li><code>crop_to_overlap(r, g, b, shifts_r, shifts_g)</code>  
+      Crops each channel to the largest common overlapping window after alignment.  
+      <strong>Purpose:</strong> Removes invalid borders where some channels lack data. I didn't end up using it
+    because it made it worse for some reason? I'm not sure why, but it's an interesting problem.</li>
+
+    <li><code>basic_crop(img, border=40)</code>  
+      Crops a fixed-width strip from every edge of the image.  
+      <strong>Purpose:</strong> Removes noisy borders, scanner artifacts, and black frames left over after alignment.</li>
+
+  </ul>
+</section>
+    <!-- Iterative Alignment Only Results -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Iterative Alignment Results</h3>
+      <p>
+        Before moving to the multi-resolution pyramid search, I also tested the simpler 
+        single-scale <strong>iterative alignment</strong> approach. 
+        Below are the results for three of the provided .jpg images: 
+        <em>Cathedral</em>, <em>Monastery</em>, and <em>Tobolsk</em>.
+      </p>
+
+      <!-- Cathedral -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Cathedral (Iterative)</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (3, 12) | Best Green Shifts: (2, 5)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/cathedral/cropped.jpg" alt="Cathedral uncropped iterative" class="rounded shadow">        </div>
+      </div>
+
+      <!-- Monastery -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Monastery (Iterative)</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (2, 3) | Best Green Shifts: (2, -3)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/monastery/cropped.jpg" alt="Monastery uncropped iterative" class="rounded shadow">        </div>
+      </div>
+
+      <!-- Tobolsk -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Tobolsk (Iterative)</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (3, 6) | Best Green Shifts: (3, 3)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/tobolsk/cropped.jpg" alt="Tobolsk uncropped iterative" class="rounded shadow">
+        </div>
+      </div>
+    </section>
+
+
+    <!-- Pyramid Only Results -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Pyramid Alignment Results</h3>
+      <p>Here are results on all of the provided images. Each block shows the stacked (unaligned), uncropped (aligned), and cropped (final) versions, along with the best shifts I found.</p>
+
+      <!-- Emir -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Emir</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (57, 103) | Best Green Shifts: (24, 49)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/emir/stacked.jpg" alt="Emir stacked" class="rounded shadow">
+          <img src="alignment_results/emir/uncropped.jpg" alt="Emir uncropped" class="rounded shadow">
+          <img src="alignment_results/emir/cropped.jpg" alt="Emir cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Italil -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Italil</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (35, 76) | Best Green Shifts: (21, 38)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/italil/stacked.jpg" alt="Italil stacked" class="rounded shadow">
+          <img src="alignment_results/italil/uncropped.jpg" alt="Italil uncropped" class="rounded shadow">
+          <img src="alignment_results/italil/cropped.jpg" alt="Italil cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Church -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Church</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (-4, 58) | Best Green Shifts: (4, 25)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/church/stacked.jpg" alt="Church stacked" class="rounded shadow">
+          <img src="alignment_results/church/uncropped.jpg" alt="Church uncropped" class="rounded shadow">
+          <img src="alignment_results/church/cropped.jpg" alt="Church cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Three Generations -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Three Generations</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (11, 112) | Best Green Shifts: (14, 53)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/three_generations/stacked.jpg" alt="Three Generations stacked" class="rounded shadow">
+          <img src="alignment_results/three_generations/uncropped.jpg" alt="Three Generations uncropped" class="rounded shadow">
+          <img src="alignment_results/three_generations/cropped.jpg" alt="Three Generations cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Lugano -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Lugano</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (-29, 93) | Best Green Shifts: (-16, 41)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/lugano/stacked.jpg" alt="Lugano stacked" class="rounded shadow">
+          <img src="alignment_results/lugano/uncropped.jpg" alt="Lugano uncropped" class="rounded shadow">
+          <img src="alignment_results/lugano/cropped.jpg" alt="Lugano cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Melons -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Melons</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (13, 178) | Best Green Shifts: (11, 82)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/melons/stacked.jpg" alt="Melons stacked" class="rounded shadow">
+          <img src="alignment_results/melons/uncropped.jpg" alt="Melons uncropped" class="rounded shadow">
+          <img src="alignment_results/melons/cropped.jpg" alt="Melons cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Lastochikino -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Lastochikino</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (-9, 75) | Best Green Shifts: (-2, -3)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/lastochikino/stacked.jpg" alt="Lastochikino stacked" class="rounded shadow">
+          <img src="alignment_results/lastochikino/uncropped.jpg" alt="Lastochikino uncropped" class="rounded shadow">
+          <img src="alignment_results/lastochikino/cropped.jpg" alt="Lastochikino cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Icon -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Icon</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (23, 89) | Best Green Shifts: (17, 41)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/icon/stacked.jpg" alt="Icon stacked" class="rounded shadow">
+          <img src="alignment_results/icon/uncropped.jpg" alt="Icon uncropped" class="rounded shadow">
+          <img src="alignment_results/icon/cropped.jpg" alt="Icon cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Siren -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Siren</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (-25, 96) | Best Green Shifts: (-6, 49)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/siren/stacked.jpg" alt="Siren stacked" class="rounded shadow">
+          <img src="alignment_results/siren/uncropped.jpg" alt="Siren uncropped" class="rounded shadow">
+          <img src="alignment_results/siren/cropped.jpg" alt="Siren cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Self Portrait -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Self Portrait</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (37, 176) | Best Green Shifts: (29, 79)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/self_portrait/stacked.jpg" alt="Self Portrait stacked" class="rounded shadow">
+          <img src="alignment_results/self_portrait/uncropped.jpg" alt="Self Portrait uncropped" class="rounded shadow">
+          <img src="alignment_results/self_portrait/cropped.jpg" alt="Self Portrait cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Harvesters -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Harvesters</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (14, 124) | Best Green Shifts: (17, 60)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="alignment_results/harvesters/stacked.jpg" alt="Harvesters stacked" class="rounded shadow">
+          <img src="alignment_results/harvesters/uncropped.jpg" alt="Harvesters uncropped" class="rounded shadow">
+          <img src="alignment_results/harvesters/cropped.jpg" alt="Harvesters cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Monastery -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Monastery</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (2, 3) | Best Green Shifts: (2, -3)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="pyramid_only/monastery/monastery_stacked.jpg" alt="Monastery stacked" class="rounded shadow">
+          <img src="pyramid_only/monastery/monastery_uncropped.jpg" alt="Monastery uncropped" class="rounded shadow">
+          <img src="pyramid_only/monastery/monastery_pyramid_cropped.jpg" alt="Monastery cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Tobolsk -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Tobolsk</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (3, 6) | Best Green Shifts: (3, 3)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="pyramid_only/tobolsk/tobolsk_stacked.jpg" alt="Tobolsk stacked" class="rounded shadow">
+          <img src="pyramid_only/tobolsk/tobolsk_uncropped.jpg" alt="Tobolsk uncropped" class="rounded shadow">
+          <img src="pyramid_only/tobolsk/tobolsk_pyramid_cropped.jpg" alt="Tobolsk cropped" class="rounded shadow">
+        </div>
+      </div>
+
+      <!-- Cathedral -->
+      <div class="mt-8">
+        <h4 class="text-lg font-semibold">Cathedral</h4>
+        <p class="text-sm text-gray-700">Best Red Shifts: (3, 12) | Best Green Shifts: (2, 5)</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <img src="pyramid_only/cathedral/cathedral_stacked.jpg" alt="Cathedral stacked" class="rounded shadow">
+          <img src="pyramid_only/cathedral/cathedral_uncropped.jpg" alt="Cathedral uncropped" class="rounded shadow">
+          <img src="pyramid_only/cathedral/cathedral_pyramid_cropped.jpg" alt="Cathedral cropped" class="rounded shadow">
+        </div>
+      </div>
+
+    </section>
+
+      <!-- Add monastery, harvesters, train, etc. in same format -->
+    </section>
+
+    <!-- Own Examples -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">My Own Examples</h3>
+      <p>
+        I also processed additional glass plate scans from the Prokudin-Gorskii collection. 
+        The first was a high resolution tif image. The second is a lower resolution jpg. 
+        Below are the two examples aligned using the same pipeline:
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        
+        <!-- Hut Example -->
+        <div>
+          <h4 class="text-lg font-semibold text-center">Group of eleven adults and children, seated on a rug, in front of a yurt</h4>
+          <p class="text-sm text-gray-700 text-center">
+            Best Red Shifts: (49, 130) | Best Green Shifts: (31, 58)
+          </p>
+          <img src="alignment_results/hut/hut_cropped.jpg" 
+               alt="[Group of eleven adults and children, seated on a rug, in front of a yurt]" 
+               class="rounded shadow w-full h-auto mt-2">
+          <p class="text-center text-sm mt-2">
+            [Group of eleven adults and children, seated on a rug, in front of a yurt] 
+            Not too bad. High resolution images will of course be shakier.
+          </p>
+        </div>
+
+        <!-- Statute Example -->
+        <div>
+          <h4 class="text-lg font-semibold text-center">V Alupkie. Krym</h4>
+          <p class="text-sm text-gray-700 text-center">
+            Best Red Shifts: (-3, 14) | Best Green Shifts: (-1, 3)
+          </p>
+          <img src="alignment_results/statute/statute_cropped.jpg" 
+               alt="V Alupki︠e︡. Krym" 
+               class="rounded shadow w-full h-auto mt-2">
+          <p class="text-center text-sm mt-2">
+            [V Alupkie. Krym] 
+            As expected, a better alignment for a lower res image.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- Failures -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Failures and Future Improvements</h3>
+      <p>
+        Although the alignment pipeline works reasonably well overall, two key issues still stand out:
+      </p>
+      <ul class="list-disc list-inside ml-6 space-y-2 mt-2">
+        <li>
+          <strong>Residual Color Fringing:</strong>  
+          Many outputs still show colored outlines (red, green, or blue) around edges, especially in high-contrast regions such as clothing, trees, and buildings.  
+          <em>Future Fix:</em> This could be reduced by refining the search with sub-pixel alignment or gradient-based optimization, rather than relying solely on integer pixel shifts.
+        </li>
+      </ul>
+    </section>
+
+    <!-- Bells and Whistles -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Bells and Whistles</h3>
+      <p>
+        Unfortunately nothing. I tried to get the overlap crop to work, but it took too long and I have other homework.
+      </p>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-200 text-center p-4 mt-12 text-sm text-gray-600">
+    © 2025 Garv Goswami | CS180 Project 1
+  </footer>
+</body>
+</html>

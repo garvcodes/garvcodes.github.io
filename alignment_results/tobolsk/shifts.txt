@@ -1,0 +1,2 @@
+Best Red Shifts: (3, 6)
+Best Green Shifts: (3, 3)
