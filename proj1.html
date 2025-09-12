@@ -504,7 +504,6 @@
       <section>
         <h3 class="text-xl font-medium mb-3">How I Tried to Fix <em>Emir</em></h3>
         <ul class="list-disc list-inside ml-6 text-gray-800 space-y-1">
-          <li><strong>Scored edges, not raw pixels:</strong> used gradient-based NCC so brightness differences don’t mislead the match.</li>
           <li><strong>Trimmed borders more:</strong> increased border trim (≈8% -> 10%) to ignore black frames and scan artifacts.</li>
           <li><strong>Stronger pyramid search:</strong> added a level and used a slightly larger search window at each scale.</li>
         </ul>
