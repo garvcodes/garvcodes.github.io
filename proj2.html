@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS180 Project 2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      img {
+        max-width: 100%;
+        height: auto;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      section, div {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      header, footer, nav {
+        display: none;
+      }
+      body {
+        background: white;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-blue-800 to-blue-600 text-yellow-400 p-6 shadow-md flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <img src="photos/seal.png" alt="Berkeley Logo" class="w-16 h-16 rounded">
+      <h1 class="text-2xl font-bold">CS180 Class Repository - Garv Goswami</h1>
+    </div>
+    <nav>
+      <ul class="flex space-x-6 text-lg">
+        <li><a href="index.html" class="hover:underline">Home</a></li>
+        <li><a href="proj0.html" class="hover:underline">Project 0</a></li>
+        <li><a href="proj1.html" class="hover:underline">Project 1</a></li>
+        <li><a href="proj2.html" class="hover:underline font-bold">Project 2</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-5xl mx-auto p-6 space-y-12">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Project 2: Fun with Filters and Frequencies!</h2>
+
+    <!-- Overview -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Overview</h3>
+      <p>
+        In this project, I explored image filtering, edge detection, and multi-resolution blending. 
+        The assignment was divided into two main parts:
+      </p>
+      <ul class="list-disc list-inside ml-6 mt-2">
+        <li><strong>Part 1:</strong> Fun with Filters — convolution, finite differences, and derivative of Gaussian.</li>
+        <li><strong>Part 2:</strong> Fun with Frequencies — sharpening, hybrid images, Gaussian/Laplacian stacks, and multi-resolution blending (the famous <em>Oraple</em>!).</li>
+      </ul>
+    </section>
+
+    <!-- Part 1 -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Part 1: Filters and Edges</h3>
+
+    <!-- Part 1.1 -->
+    <section>
+        <h3 class="text-xl font-medium mb-3">Part 1.1: Convolutions from Scratch!</h3>
+        <p>
+          In this section, I implemented convolution in three ways: first using four nested loops, then
+          with two nested loops, and finally by comparing against the built-in
+          <code>scipy.signal.convolve2d</code>.  
+          All implementations supported zero-padding to handle boundaries and the runtime for the four-loop version is O(H * W * KH * KW), (Height * Width * Kernel Height * Kernel Width), while the runtime for the two-loop is only O(H*W) since it's vectorized.
+        </p>
+  
+        <p class="mt-2">
+          To test, I created a 9×9 box filter and applied it to a grayscale image of Lebron and Draymond Green. 
+          I also convolved the image with finite difference operators 
+          <code>D<sub>x</sub></code> and <code>D<sub>y</sub></code>.  
+          
+          <p class="mt-4">Below is my main convolution function, which calls either the two-loop or four-loop implementation:</p>
+
+          <pre class="bg-black text-green-400 text-sm rounded-lg p-4 overflow-x-auto mt-4"><code class="language-python">
+            def convolve_2D(image, kernel, pad_width = 0, mul_type="two_loop"):
+
+            image = np.array(image, dtype=np.float32)
+            kernel = np.array(kernel, dtype=np.float32)
+        
+            # * Here is the padding part of the code, for loops that insert 0s according to pad_width
+            # * numpy doesn't allow array size changes so a new array has to be created
+        
+            def _pad_image(image, pad_width):
+                padded_image = np.full((image.shape[0] + 2 *pad_width, image.shape[1] + 2 * pad_width), 0, dtype=np.float32)
+        
+                for row in range(image.shape[0]): 
+                    for col in range(image.shape[1]):
+                        padded_image[row + pad_width][col + pad_width] = image[row][col]
+                    
+                return padded_image
+        
+            
+        # * _pad_image is a helper function we can pull out of the bag here only if needed
+        
+            if(pad_width):
+                image = _pad_image(image, pad_width)
+        
+                print(image)
+        
+        # * After creating the padded image, we can create the holder for the reusult
+        # * The formula for the shape is padded_image_dim - kernel_dim + 1 
+        
+            result = np.full((image.shape[0] - kernel.shape[0] + 1, image.shape[1] - kernel.shape[1] + 1), 0, dtype=np.float32)
+        
+        
+        # * Since this is a convolution, we should flip the kernel
+        
+            kernel = np.flip(kernel)
+        
+        # * Now we have both the flipped image and the rotated kernel, so we should be able to multiply and add
+        
+        
+        # * This is a four for-loop convolution implementation
+            def element_wise_dot_four(image, kernel):
+                for slide_right_num in range(image.shape[0] - kernel.shape[0] + 1):
+                    for slide_down_num in range(image.shape[1] - kernel.shape[1] + 1):
+                        addition_holder = 0 
+                        for row in range(kernel.shape[0]):
+                            for col in range(kernel.shape[1]):
+                                addition_holder += kernel[row][col] * image[row + slide_right_num][col + slide_down_num]
+        
+                        result[slide_right_num][slide_down_num] = addition_holder
+                        addition_holder = 0
+        
+                return result
+        
+        # * This is a two for-loop convolution implementation
+        
+            def element_wise_dot_two(image, kernel):
+                for row in range(result.shape[0]):
+                    for col in range(result.shape[1]):
+                        window = image[row:row+kernel.shape[0], col:col+kernel.shape[1]]
+        
+                        result[row][col] = np.sum(window * kernel)
+        
+                return result
+        
+        
+            
+            if mul_type == "two_loop":
+                result = element_wise_dot_two(image, kernel)
+            else:
+                result = element_wise_dot_four(image, kernel)
+        
+            return result
+        
+
+          </code></pre>
+
+          <p class="mt-4">These are the kernel implementations:</p>
+
+
+          <pre class="bg-black text-green-400 text-sm rounded-lg p-4 overflow-x-auto mt-4"><code>
+
+            box_filter = 1/9 * np.full((3,3), 1, dtype=np.float32)
+
+            my_convolved_image = convolve_2D(gray, box_filter, pad_width=0)
+            
+            builtin_convolved_image = scipy.signal.convolve2d(gray, box_filter, mode="valid")
+
+            '''
+            '''
+            # * Now I'm going to use these as kernels instead
+            
+            dx = np.array([[1, 0, -1]])
+            dy = np.array([[1],[0],[-1]])
+            
+            my_dx_image = convolve_2D(gray, dx, pad_width=0)
+            
+            my_dy_image = convolve_2D(gray, dy, pad_width=0)
+            
+            builtin_dx_image = scipy.signal.convolve2d(gray, dx, mode="valid")
+            builtin_dy_image = scipy.signal.convolve2d(gray, dy, mode="valid")
+
+
+          </code> </pre>         
+          
+          
+          Below I show some results and comparisons:
+        </p>
+  
+        <div class="grid grid-cols-1 gap-6 mt-6">
+            <figure class="flex flex-col items-center">
+              <img src="photos/bron_dray.jpeg" alt="Original grayscale" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                Original image converted to grayscale
+              </figcaption>
+            </figure>
+          
+            <figure class="flex flex-col items-center">
+              <img src="photos/convolution_comparisons.png" alt="Box filter comparisons" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                Box filter (9×9) comparison
+              </figcaption>
+            </figure>
+          
+            <figure class="flex flex-col items-center">
+              <img src="photos/dx_dy_convolved.png" alt="Finite difference comparisons" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                Finite difference (Dx, Dy) comparison
+              </figcaption>
+            </figure>
+          </div>
+
+        <p class="mt-4">
+          The results from my implementation matched those from <code>scipy.signal.convolve2d</code>.  
+          Runtime was significantly faster using the built-in function, but the custom code
+          helped build intuition for how convolutions operate at the pixel level.
+        </p>
+      </section>
+  
+
+      <!-- 1.2 -->
+      <div class="mt-6">
+        <h4 class="text-lg font-semibold">Part 1.2: Finite Difference Operator</h4>
+        <p>
+            In this section, I applied the finite difference operators 
+            <code>D<sub>x</sub></code> and <code>D<sub>y</sub></code> to the
+            <i>Cameraman</i> image to compute horizontal and vertical image gradients. 
+            These operators highlight edges by capturing intensity changes along the x and y directions. 
+            I then combined them to calculate the gradient magnitude, which emphasizes overall edge strength. 
+            Finally, I binarized the gradient magnitude using a threshold value (0.34) to produce a clear edge map. 
+            This demonstrates how simple derivative filters can be used for edge detection.
+          </p>
+
+        <div class="grid grid-cols-1 gap-6 mt-6">
+            <figure class="flex flex-col items-center">
+              <img src="photos/grad_mag.png" alt="Original grayscale" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                Finite Difference and Gradient Magnitude Computation Results on Cameraman
+              </figcaption>
+            </figure>
+          
+            <figure class="flex flex-col items-center">
+              <img src="photos/Figure_1.png" alt="Box filter comparisons" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                Binarized Gradient Magnitude Results on Cameraman
+              </figcaption>
+            </figure>
+          </div>
+
+      <!-- 1.3 -->
+      <div class="mt-6">
+        <h4 class="text-lg font-semibold">Part 1.3: Derivative of Gaussian (DoG) Filter</h4>
+        <p>
+            In this part, I reduced noise by first smoothing the image with a Gaussian filter before
+            applying the finite difference operators. This produced cleaner edge maps compared to 
+            the raw derivatives from Part 1.2. I also constructed derivative of Gaussian (DoG) filters 
+            by convolving the Gaussian kernel with <code>D<sub>x</sub></code> and <code>D<sub>y</sub></code>. 
+            Using these DoG filters directly gives the same result as applying Gaussian smoothing first, 
+            then taking derivatives. Compare the DoG Filter Binarized Gradient Magnitute (threshold = 0.14)
+            to the one above and notice that it looks better.
+          </p>
+          
+          <div class="grid grid-cols-1 gap-6 mt-6">
+            <figure class="flex flex-col items-center">
+              <img src="photos/DoG_Filter_Binarized.png" alt="DoG Filter Binarized" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                DoG Filter Binarized Gradient Magnitute (threshold = 0.14)
+              </figcaption>
+            </figure>
+          
+            <figure class="flex flex-col items-center">
+              <img src="photos/DoG_filters.png" alt="DoG filter comparisons" class="rounded shadow">
+              <figcaption class="text-sm text-gray-600 mt-2 text-center">
+                DoG Filters
+              </figcaption>
+            </figure>
+          </div>
+
+      </div>
+
+    <!-- Part 2 -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">Part 2: Fun with Frequencies</h3>
+
+<!-- 2.1 -->
+<div class="mt-6">
+    <h4 class="text-lg font-semibold">Part 2.1: Image Sharpening</h4>
+  
+    <p>
+      In this part, I implemented image sharpening using the unsharp masking technique.
+      First, I applied a Gaussian filter to the Taj Mahal image to extract its low-frequency
+      components (the blurred version). Subtracting this blurred image from the original left
+      me with the high-frequency details such as edges and fine textures. By adding these
+      high-frequency details back to the original image, I produced a sharpened result that
+      enhances edges and makes the image appear crisper. This demonstrates how unsharp masking
+      works by amplifying high-frequency content while preserving the overall structure of the image.
+    </p>
+  
+    <div class="grid grid-cols-1 gap-6 mt-4">
+      <figure>
+        <img 
+          src="photos/taj_sharpened.jpg" 
+          alt="Sharpened Taj" 
+          class="rounded shadow mx-auto"
+        >
+      </figure>
+
+      <p>
+        I similarly applied the procedure below to an image of a house. You can see that it does look sharper, but a little darkly glazed.
+      </p>
+
+      <figure>
+        <img 
+          src="photos/house_sharpened.jpg" 
+          alt="Sharpened House" 
+          class="rounded shadow mx-auto"
+        >
+      </figure>
+
+      <p class="text-center">
+        Notice here that I also applied the same to an already high-res image of Jalen Brunson.
+        You can see that the result is not nearly as good as the original.
+      </p>
+  
+      <figure>
+        <img 
+          src="photos/brunson_sharpened.png" 
+          alt="Sharpened Brunson" 
+          class="rounded shadow mx-auto"
+        >
+      </figure>
+    </div>
+  </div>
+  
+  
+  
+<!-- 2.2 -->
+
+  <div class="mt-6">
+    <h4 class="text-lg font-semibold">Part 2.2: Hybrid Images</h4>
+    <p>
+        In this part, I created <b>three hybrid images</b>: the classic Derek + Nutmeg pair (as required) and two 
+        additional hybrids of my own choosing. For the Derek + Nutmeg hybrid, I carefully walked through the 
+        <b>entire pipeline</b>: starting with the <b>original, aligned input images</b>, computing and visualizing 
+        their <b>Fourier transforms</b>, generating the <b>low-pass filtered result</b> for one image, and extracting 
+        the <b>high-pass component</b> of the other. A key step here was the <b>cutoff frequency choice</b>, which I 
+        set by selecting the Gaussian blur parameter (<code>σ = 6</code> with a 31×31 kernel). This parameter 
+        determined what counted as “low-frequency” structure versus “high-frequency” detail. Choosing too small of a 
+        cutoff left both images overly sharp and hard to separate, while too large of a cutoff lost important 
+        structure. With this setting, the hybrid image clearly looks like Derek up close (high frequencies dominate) 
+        but transitions to Nutmeg from afar (low frequencies dominate). I also included the <b>final hybrid image</b> 
+        and its <b>frequency spectrum visualization</b> to confirm that the low- and high-frequency information were 
+        separated correctly.
+        <br><br>
+        For my two additional hybrids, I presented the <b>original input images</b> alongside the final blended 
+        results. These demonstrate how the same technique generalizes beyond the canonical example, and highlight how 
+        alignment, filter size, and cutoff frequency choices influence the outcome of the hybrid. Across all three 
+        examples, this process shows how Gaussian blurs and frequency-domain reasoning can be combined to generate 
+        perceptually interesting images that depend on viewing distance.
+      </p>
+  
+    <!-- Cat Hybrid Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <figure class="flex flex-col items-center">
+        <img src="photos/hybrid_cat.png" alt="Hybrid cat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Hybrid Image (low-pass + high-pass combination)
+        </figcaption>
+      </figure>
+  
+      <figure class="flex flex-col items-center">
+        <img src="photos/cat_fft.jpg" alt="FFT of hybrid cat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Frequency Analysis of Hybrid Image (FFT magnitude)
+        </figcaption>
+      </figure>
+    </div>
+  
+    <!-- LeBron Hybrid Section -->
+    <p class="mt-8">
+      Below, I repeat the hybrid image process using a picture of LeBron and a goat:
+    </p>
+
+    <figure class="flex flex-col items-center">
+        <img src="photos/lebron.jpg" alt="Hybrid LeBron + Goat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Original Lebron
+        </figcaption>
+      </figure>
+  
+      <figure class="flex flex-col items-center">
+        <img src="photos/goat.jpg" alt="FFT of Hybrid LeBron + Goat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Original Goat
+        </figcaption>
+      </figure>    
+  
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <figure class="flex flex-col items-center">
+        <img src="photos/bron_goat.png" alt="Hybrid LeBron + Goat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Hybrid Image (LeBron + Goat, low-pass + high-pass combination)
+        </figcaption>
+      </figure>
+  
+      <figure class="flex flex-col items-center">
+        <img src="photos/bron_fft.png" alt="FFT of Hybrid LeBron + Goat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Frequency Analysis of Hybrid Image (FFT magnitude)
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <p class="mt-8">
+    Below, I repeat the hybrid image process using a picture of a face and a skull:
+  </p>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+    <figure class="flex flex-col items-center">
+        <img src="photos/face.jpeg" alt="Hybrid LeBron + Goat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Original Face
+        </figcaption>
+      </figure>
+  
+      <figure class="flex flex-col items-center">
+        <img src="photos/skull.jpeg" alt="FFT of Hybrid LeBron + Goat image" class="rounded shadow">
+        <figcaption class="text-sm text-gray-600 mt-2 text-center">
+          Original Skull
+        </figcaption>
+      </figure>
+
+    <figure class="flex flex-col items-center">
+      <img src="photos/face_skull.png" alt="Hybrid LeBron + Goat image" class="rounded shadow">
+      <figcaption class="text-sm text-gray-600 mt-2 text-center">
+        Hybrid Image (Face + Skull, low-pass + high-pass combination)
+      </figcaption>
+    </figure>
+
+    <figure class="flex flex-col items-center">
+      <img src="photos/bron_fft.png" alt="FFT of Hybrid LeBron + Goat image" class="rounded shadow">
+      <figcaption class="text-sm text-gray-600 mt-2 text-center">
+        Frequency Analysis of Hybrid Image (FFT magnitude)
+      </figcaption>
+    </figure>
+
+</div> <!-- close the 2-column grid here -->
+
+<p class="mt-8">
+  Now, here's a comprehensive figure including the alignment and everything else. 
+  I believe the skull is a weird color because normalization is applied before displaying the hybrid, 
+  so it all looks fine in the end. Pretty cool looking though, maybe I should've kept it un-normalized.
+</p>
+
+<div class="flex justify-center mt-6">
+  <figure class="flex flex-col items-center">
+    <img src="photos/22_big.png" alt="Comprehensive Figure" class="rounded shadow">
+    <figcaption class="text-sm text-gray-600 mt-2 text-center">
+      Comprehensive Figure
+    </figcaption>
+  </figure>
+</div>
+
+      <!-- 2.3 -->
+      <div class="mt-6">
+        <h4 class="text-lg font-semibold">Part 2.3: Gaussian and Laplacian Stacks</h4>
+        <p>
+            In this part, I recreated the famous "Oraple" figure by blending an apple and an orange using 
+            Gaussian and Laplacian stacks. To do this, I reused and extended some of my code from Project 1, 
+            where I had already implemented Gaussian pyramids and convolution from scratch. I modified the 
+            functions so they would support RGB images and increased the kernel size to produce smoother 
+            results suitable for multi-resolution blending. The process involved building Gaussian stacks for 
+            the input images and a binary mask, constructing Laplacian stacks by subtracting adjacent Gaussian 
+            levels, and then blending contributions from both images level by level. Finally, I collapsed the 
+            blended Laplacian stack to form the hybrid "Oraple."  
+            <br><br>
+            Using these functions, I was able to recreate figure 3.42 in the Szeliski book
+          </p>
+          
+          <figure class="flex flex-col items-center mt-4">
+            <img src="photos/orapple_figure.png" alt="Recreated Oraple Figure" class="rounded shadow">
+            <figcaption class="text-sm text-gray-600 mt-2 text-center">
+              Recreated Figure&nbsp;3.42 (Oraple) using Gaussian and Laplacian stacks
+            </figcaption>
+          </figure>
+        </div>
+
+      <!-- 2.4 -->
+      <div class="mt-6">
+        <h4 class="text-lg font-semibold">Part 2.4: Multiresolution Blending (The Oraple!)</h4>
+        <p>
+          In this final part, I extended the multi-resolution blending technique from Part 2.3 by experimenting 
+          with different mask shapes. Instead of only using a vertical split mask (square), I also created a circular 
+          mask to blend images more naturally around a central region. This allowed me to produce more interesting 
+          composite images where the transition between the two inputs is smoother and less obvious, which you can see for the eye-hand image. 
+          The implementation reused my Gaussian and Laplacian stack code from earlier parts, but generalized it so 
+          that any mask shape can be applied for blending. This demonstrates the flexibility of stack-based blending 
+          beyond just the traditional "Oraple" example. However, since we used a stack instead of a pyramid, there's 
+          no blending at L0, which makes those details appear somewhat stark, as seen below.
+        </p>
+      
+        <!-- Apple + Orange side by side -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+          <img src="photos/apple.jpeg" alt="Apple" class="rounded shadow">
+          <img src="photos/orange.jpeg" alt="Orange" class="rounded shadow">
+        </div>
+      
+        <!-- Orapple on its own row -->
+        <div class="flex justify-center mt-6">
+          <img src="photos/orapple.png" alt="Oraple" class="rounded shadow">
+        </div>
+
+
+      <p>
+       Here's an example of  me using my circular mask for a cool hand-eye.
+      </p>      
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <img src="photos/eyeball.jpg" alt="Eye" class="rounded shadow">
+        <img src="photos/palm.jpg" alt="Hand" class="rounded shadow">
+      </div>
+
+      <div class="flex justify-center mt-6">
+        <img src="photos/eye_hand.png" alt="eye-hand" class="rounded shadow">
+      </div>
+    </div>
+
+    <p>
+        I also wanted to try using the square mask to combine jalen brunson and lebron.
+       </p>      
+ 
+       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+         <img src="photos/brunson.jpg" alt="brunson" class="rounded shadow">
+         <img src="photos/lebron.jpg" alt="bron" class="rounded shadow">
+       </div>
+ 
+       <div class="flex justify-center mt-6">
+         <img src="photos/bron_brunson.jpg" alt="bron-brunson" class="rounded shadow">
+       </div>
+     </div>
+
+    <!-- Reflection -->
+    <section>
+      <h3 class="text-xl font-medium mb-3">What I Learned</h3>
+      <p>
+        The most important thing I learned was how frequency analysis reveals structure that’s invisible in raw pixel space. 
+        From edge detection to hybrid images and blending, frequency decomposition makes image manipulation both efficient and perceptually convincing.
+
+        Also, the importance of the lowest level of detail during the multiresolution blending section was really interesting.
+
+        Also, this took pretty long, so I didn't have time to do bells and whistles unfortunately.
+      </p>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-200 text-center p-4 mt-12 text-sm text-gray-600">
+    © 2025 Garv Goswami | CS180 Project 2
+  </footer>
+</body>
+</html>
