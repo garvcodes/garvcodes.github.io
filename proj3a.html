@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS180 Project 3A — Image Warping & Mosaicing</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      img { max-width: 100%; height: auto; page-break-inside: avoid; break-inside: avoid; }
+      section, div { page-break-inside: avoid; break-inside: avoid; }
+      header, footer, nav { display: none; }
+      body { background: white; }
+    }
+    /* little helper so large figures don't explode width on small screens */
+    .fig { max-width: 100%; }
+    .code {
+      background: #0b1021; color: #b9f6ca; font-size: .9rem; line-height: 1.4;
+      padding: 1rem; border-radius: .5rem; overflow-x: auto;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-indigo-500 to-blue-600 text-yellow-500 p-6 shadow-md flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <!-- keep using the same seal you used before -->
+      <img src="photos/seal.png" alt="College Seal" class="w-16 h-16 rounded">
+      <h1 class="text-2xl font-bold">CS180 Class Repository — Garv Goswami</h1>
+    </div>
+    <nav>
+      <ul class="flex space-x-6 text-lg">
+        <li><a href="index.html" class="hover:underline">Home</a></li>
+        <li><a href="proj0.html" class="hover:underline">Project 0</a></li>
+        <li><a href="proj1.html" class="hover:underline">Project 1</a></li>
+        <li><a href="proj2.html" class="hover:underline">Project 2</a></li>
+        <li><a href="proj3a.html" class="hover:underline font-bold">Project 3A</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-6xl mx-auto p-6 space-y-12">
+    <h2 class="text-3xl font-semibold text-gray-800">Project 3A: Image Warping and Mosaicing</h2>
+
+    <!-- Overview -->
+    <section>
+      <h3 class="text-xl font-medium mb-2">Overview</h3>
+      <p>
+        The goal of this assignment was to implement homography estimation, inverse warping with
+        <em>nearest neighbor</em> and <em>bilinear</em> interpolation, rectification, and finally
+        blend multiple photos into mosaics using feathered alpha masks. I avoided the disallowed
+        high-level warping APIs (e.g., <code>cv2.findHomography</code>, <code>cv2.warpPerspective</code>,
+        <code>skimage.transform.warp</code>) and wrote the core pieces from scratch.
+      </p>
+    </section>
+
+    <!-- A.1 -->
+    <section>
+      <h3 class="text-xl font-semibold mb-3">A.1 — Shoot the Pictures</h3>
+      <p class="mb-4">
+        I shot a bunch overlapping sequences by rotating the camera about (roughly) a fixed center
+        of projection to induce projective transforms. The reason I took so many was to be able to compile the best results for when it's time to generate mosaics. Below are four sets (more than the required two):
+      </p>
+
+      <!-- Breezeway -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">Set 1 — Breezeway</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <img src="images/breezeway/left.jpg" class="rounded shadow fig" alt="breezeway left">
+          <img src="images/breezeway/middle.jpg" class="rounded shadow fig" alt="breezeway middle">
+          <img src="images/breezeway/right.jpg" class="rounded shadow fig" alt="breezeway right">
+        </div>
+      </div>
+
+      <!-- Scenic -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">Set 2 — Scenic</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <img src="images/scenic/left.jpg" class="rounded shadow fig" alt="scenic left">
+          <img src="images/scenic/middle.jpg" class="rounded shadow fig" alt="scenic middle">
+          <img src="images/scenic/right.jpg" class="rounded shadow fig" alt="scenic right">
+        </div>
+      </div>
+
+    <!-- Hearst -->
+    <div class="mb-8">
+        <h4 class="font-medium mb-2">Set 3 — Hearst</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <img src="images/hearst/left.jpg" class="rounded shadow fig" alt="scenic left">
+            <img src="images/hearst/middle.jpg" class="rounded shadow fig" alt="scenic middle">
+            <img src="images/hearst/right.jpg" class="rounded shadow fig" alt="scenic right">
+        </div>
+        </div>
+
+      <!-- Whiteboard -->
+      <div class="mb-4">
+        <h4 class="font-medium mb-2">Set 4 — Whiteboard / Indoor</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <img src="images/whiteboard/left.jpg" class="rounded shadow fig" alt="whiteboard left">
+          <img src="images/whiteboard/middle.jpg" class="rounded shadow fig" alt="whiteboard middle">
+          <img src="images/whiteboard/right.jpg" class="rounded shadow fig" alt="whiteboard right">
+        </div>
+      </div>
+    </section>
+
+    <!-- A.2 -->
+    <section>
+      <h3 class="text-xl font-semibold mb-3">A.2 — Recover Homographies</h3>
+      <p class="mb-4">
+        I solve for the 3×3 homography <code>H</code> using a least-squares nullspace solution to
+        <code>A h = 0</code> from ≥4 correspondences (collected with <code>matplotlib.ginput</code>).
+        I also visualize correspondences, show an excerpt of the linear system, and print the recovered
+        <code>H</code>. Here’s the deliverable figure:
+      </p>
+
+      <figure class="flex flex-col items-center">
+        <img src="results_for_later/A2_deliverable.png" class="rounded shadow fig" alt="A2 deliverable">
+        <figcaption class="text-sm text-gray-600 mt-2">Correspondences, system snapshot, and estimated homography.</figcaption>
+      </figure>
+
+      <p class="mt-6 mb-2 font-medium">Core routine (trimmed to the essentials):</p>
+      <pre class="code"><code>def computeH(im1_pts, im2_pts):
+        # * num_points is just the number of points that we select, the more the better I'm pretty sure?
+    
+        #! Remember that the overall goal here is for two points in different images, we can use the homography matrix H to map the same pixel in the first photo to one in the second phone
+        # TODO: Confirm the above in OH 
+    
+    
+        #TODO: 10/10 Just talked to my friend and apparently I was allowed to use a built-in least-squares here. Unfortunate.
+        num_points = im1_pts.shape[0]
+        A = []
+    
+        for i in range(num_points):
+    
+        #* Each point pair giives us two equations from the projection relations
+            x, y = im1_pts[i, 0], im1_pts[i, 1]
+            x_2, y_2 = im2_pts[i, 0], im2_pts[i, 1]
+            
+            A.append([x, y, 1, 0, 0, 0, -x*x_2, -y*x_2, -x_2])
+    
+            A.append([0, 0, 0, x, y, 1, -x*y_2, -y*y_2, -y_2])
+        
+        #* A should have shape (2 x N, 9) after all that and we can conver to a numpy array
+        A = np.array(A)
+    
+        #* Now we solve Ah = 0 using the svd bc we want a vec that lies in the null space of A
+        #* SVD factorizes A = USV^T and the least squares minimizer is the right singular vec of the smallest singular val of A
+        U, S, Vt = np.linalg.svd(A)
+        #* Then we just fix the scale and reshape
+        h = Vt[-1, :]
+        h = h / h[-1] 
+    
+        H = h.reshape(3, 3)
+    
+        return H
+    </code></pre>
+    </section>
+
+    <!-- A.3 -->
+    <section>
+      <h3 class="text-xl font-semibold mb-3">A.3 — Warp the Images + Rectification</h3>
+      <p>
+        I implemented inverse warping with both interpolation methods:
+        <strong>nearest neighbor</strong> (fast but blocky) and <strong>bilinear</strong> (slower but smoother).
+        To avoid holes, I invert the mapping from output pixels back to source coordinates and sample there.
+
+        To be clear, the point of these interpolations is because warping lands us at non-integer pixel locations,
+        and for each output pixel we need to map back to the source, which is where interpolation matters. Nearest Neighbor 
+        is exactly what it sounds like and uses the value of the single closest pixel input.
+        Bilinear averages teh 4 neigbors with weights based on distance and takes longer, but gives a smoother result.
+      </p>
+      <ul class="list-disc list-inside my-3">
+        <li><code>warpImageNearestNeighbor(img, H)</code></li>
+        <li><code>warpImageBilinear(img, H)</code></li>
+      </ul>
+      <p class="mb-6">
+        As a sanity check, I performed rectification on two images (making a planar object frontal-parallel).
+      </p>
+
+      <div class="flex flex-col space-y-8">
+        <figure class="flex flex-col items-center">
+          <img src="results_for_later/sign_rectification.jpeg" class="rounded shadow fig" alt="sign rectification">
+          <figcaption class="text-sm text-gray-600 mt-2">Rectification #1 — Sign</figcaption>
+        </figure>
+      
+        <figure class="flex flex-col items-center">
+          <img src="results_for_later/ipad_rectification.png" class="rounded shadow fig" alt="ipad rectification">
+          <figcaption class="text-sm text-gray-600 mt-2">Rectification #2 — iPad</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- A.4 -->
+    <section>
+      <h3 class="text-xl font-semibold mb-3">A.4 — Blend Images into Mosaics</h3>
+      <p>
+        After warping into a common canvas (using the predicted global bounding box and a translation offset),
+        I blend with simple feathering: set an alpha mask that falls off from image center to borders,
+        and compute a per-pixel weighted average. Below are three mosaics with their source images.
+      </p>
+
+      <!-- Mosaic 1: Scenic (3-image) -->
+      <div class="mt-6">
+        <h4 class="font-medium mb-2">Mosaic 1 — Scenic (3 images)</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+          <img src="images/scenic/left.jpg" class="rounded shadow fig" alt="scenic L">
+          <img src="images/scenic/middle.jpg" class="rounded shadow fig" alt="scenic M">
+          <img src="images/scenic/right.jpg" class="rounded shadow fig" alt="scenic R">
+        </div>
+        <figure class="flex flex-col items-center">
+          <img src="results_for_later/scenic_three_mosaic2.png" class="rounded shadow fig" alt="scenic mosaic">
+          <figcaption class="text-sm text-gray-600 mt-2">Final mosaic (feather blend).</figcaption>
+        </figure>
+      </div>
+
+      <!-- Mosaic 2: Whiteboard (3-image) -->
+      <div class="mt-10">
+        <h4 class="font-medium mb-2">Mosaic 2 — Whiteboard (3 images)</h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+          <img src="images/whiteboard/left.jpg" class="rounded shadow fig" alt="whiteboard L">
+          <img src="images/whiteboard/middle.jpg" class="rounded shadow fig" alt="whiteboard M">
+          <img src="images/whiteboard/right.jpg" class="rounded shadow fig" alt="whiteboard R">
+        </div>
+        <figure class="flex flex-col items-center">
+          <img src="results_for_later/whiteboard_mosaic.png" class="rounded shadow fig" alt="whiteboard mosaic">
+          <figcaption class="text-sm text-gray-600 mt-2">Final mosaic (feather blend). NOTE: This sucks for two reasons. The first is because I was trying to implement a crop that I have since gotten rid of. Below is better on that front. Secondly, and more obvious, these pictures suck and don't have enough overlap.</figcaption>
+        </figure>
+      </div>
+
+            <!-- Mosaic 2: Whiteboard (3-image) -->
+            <div class="mt-10">
+                <h4 class="font-medium mb-2">Mosaic 2.1 — Whiteboard (2 images)</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                  <img src="images/whiteboard/left.jpg" class="rounded shadow fig" alt="whiteboard L">
+                  <img src="images/whiteboard/middle.jpg" class="rounded shadow fig" alt="whiteboard M">
+        
+                </div>
+                <figure class="flex flex-col items-center">
+                  <img src="results_for_later/whiteboard_two_mosaic.png" class="rounded shadow fig" alt="whiteboard mosaic">
+                  <figcaption class="text-sm text-gray-600 mt-2">Final mosaic (feather blend). NOTE: This is better than above and would be even better If I took better pics.</figcaption>
+                </figure>
+              </div>
+
+      <!-- Mosaic 3: Breezeway (2-image) -->
+      <div class="mt-10">
+        <h4 class="font-medium mb-2">Mosaic 3 — Breezeway (2 images)</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+          <img src="images/breezeway/middle.jpg" class="rounded shadow fig" alt="breezeway L">
+          <img src="images/breezeway/right.jpg" class="rounded shadow fig" alt="breezeway M">
+        </div>
+        <figure class="flex flex-col items-center">
+          <img src="results_for_later/breezeway_two_mosaic2.png" class="rounded shadow fig" alt="breezeway two mosaic">
+          <figcaption class="text-sm text-gray-600 mt-2">Two-image mosaic (feather blend).</figcaption>
+        </figure>
+      </div>
+
+      <!-- Optional: another two-image scenic -->
+      <details class="mt-8">
+        <summary class="cursor-pointer text-indigo-700">Extra: Scenic two-image mosaic</summary>
+        <figure class="mt-3 flex flex-col items-center">
+          <img src="results_for_later/scenic_two_mosaic2.png" class="rounded shadow fig" alt="scenic two mosaic">
+          <figcaption class="text-sm text-gray-600 mt-2">Extra result.</figcaption>
+        </figure>
+      </details>
+
+      <p class="mt-8">
+        <strong>Notes on quality:</strong> feathering hides seams but can “ghost” high-frequency details when
+I can't hold a camera steady. A Laplacian-pyramid blend could further reduce that
+        ghosting by separating low vs high frequencies during compositing.
+      </p>
+    </section>
+
+    <!-- (Optional) Code notes for blending -->
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Implementation Notes (brief)</h3>
+      <ul class="list-disc list-inside space-y-1">
+        <li>Global canvas is computed by warping all four corners of each image with its homography and
+          taking the min/max over all.</li>
+        <li>Everything is inverse-warped into this shared frame; I use bilinear sampling for smoother results.</li>
+        <li>Alpha mask: center ≈ 1, edges fall to 0; final color is a normalized weighted sum.</li>
+      </ul>
+    </section>
+
+    <!-- Reflection -->
+    <section>
+      <h3 class="text-xl font-semibold mb-3">What I Learned</h3>
+      <p>
+        Small correspondence errors swing homographies a lot—click care matters. Inverse warping made it
+        straightforward to avoid holes, and feathering was a simple, surprisingly effective first pass at
+        blending. The toughest part was data capture (keeping rotation-only and enough visual overlap).
+      </p>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-200 text-center p-4 mt-12 text-sm text-gray-600">
+    © 2025 Garv Goswami | CS180 Project 3A
+  </footer>
+</body>
+</html>
