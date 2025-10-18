@@ -34,7 +34,7 @@
         <li><a href="proj0.html" class="hover:underline">Project 0</a></li>
         <li><a href="proj1.html" class="hover:underline">Project 1</a></li>
         <li><a href="proj2.html" class="hover:underline">Project 2</a></li>
-        <li><a href="proj3a.html" class="hover:underline font-bold">Project 3A</a></li>
+        <li><a href="proj3.html" class="hover:underline font-bold">Project 3</a></li>
       </ul>
     </nav>
   </header>
@@ -291,6 +291,110 @@ I can't hold a camera steady. A Laplacian-pyramid blend could further reduce tha
         blending. The toughest part was data capture (keeping rotation-only and enough visual overlap).
       </p>
     </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <div class="text-center">
+        <h2 class="text-2xl font-bold text-indigo-600">Part B: Automatic Panorama Stitching</h2>
+    </div>
+
+    <section>
+        <h3 class="text-xl font-medium mb-2">Overview</h3>
+        <p>
+            The second part of the project was to fully automate the mosaicing pipeline. This involved implementing the algorithm described in the paper "Multi-Image Matching using Multi-Scale Oriented Patches" by Brown et al. The steps included detecting Harris corners, using Adaptive Non-Maximal Suppression (ANMS) to select the best ones, extracting feature descriptors for each point, matching features between images, and finally using RANSAC to robustly compute the homography and stitch the images.
+        </p>
+    </section>
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">B.1 — Harris Corner Detection & ANMS</h3>
+      <p class="mb-4">
+        The first step is to identify interest points. I used the provided Harris corner detector to find thousands of potential feature points. However, this is too many and they are often poorly distributed. To fix this, I implemented <strong>Adaptive Non-Maximal Suppression (ANMS)</strong>. For each point, ANMS finds the minimum radius to the nearest neighbor that has a significantly stronger corner strength. By selecting points with the largest suppression radii, we get a set of strong corners that are well-distributed across the image.
+      </p>
+      <figure class="flex flex-col items-center">
+        <img src="results_for_later/breezeway_harris_anms.png" class="rounded shadow fig" alt="Harris corners before and after ANMS">
+        <figcaption class="text-sm text-gray-600 mt-2">Left: All Harris corners. Right: Spatially distributed corners after ANMS.</figcaption>
+      </figure>
+    </section>
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">B.2 — Feature Descriptor Extraction</h3>
+      <p class="mb-4">
+        Once interest points are selected, we need a way to describe the local image patch around each one. Following the paper, I extracted a 40x40 pixel window around each corner, blurred it, and downsampled it to an 8x8 patch. This small, blurred patch serves as the feature descriptor. To make it robust to lighting changes, each 8x8 descriptor is bias/gain-normalized by subtracting its mean and dividing by its standard deviation.
+      </p>
+      <figure class="flex flex-col items-center">
+        <img src="results_for_later/b2.png" class="rounded shadow fig" alt="Example feature descriptors">
+        <figcaption class="text-sm text-gray-600 mt-2">Example locations on the image and their corresponding 8x8 normalized feature descriptors.</figcaption>
+      </figure>
+    </section>
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">B.3 — Feature Matching</h3>
+      <p class="mb-4">
+        With descriptors for every feature point in two images, the next step is to find matching pairs. For each descriptor in the first image, I find its first and second nearest neighbors in the second image based on Euclidean distance. Following Lowe's ratio test, a match is considered valid only if the ratio of the distance to the first neighbor over the distance to the second neighbor is below a certain threshold (I used 0.8). This effectively rejects ambiguous matches where a point is almost equidistant to two different points in the other image.
+      </p>
+      <figure class="flex flex-col items-center">
+        <img src="results_for_later/b3.png" class="rounded shadow fig" alt="Feature matches between two images">
+        <figcaption class="text-sm text-gray-600 mt-2">Initial feature matches found using Lowe's ratio test. Many are correct, but outliers are still present.</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h3 class="text-xl font-semibold mb-3">B.4 — RANSAC and Automatic Mosaics</h3>
+      <p class="mb-4">
+        The initial feature matches contain many incorrect outliers. To compute a robust homography, I implemented the <strong>RANSAC (Random Sample Consensus)</strong> algorithm. RANSAC iteratively selects a random sample of 4 point pairs, computes a candidate homography, and then counts how many other pairs ("inliers") agree with this model within a certain error tolerance. After many iterations, it chooses the homography that had the largest set of inliers and re-computes a final, more accurate homography using all of them. This process effectively ignores the outliers.
+      </p>
+      <p class="mb-4">Below are three final mosaics created using this fully automatic pipeline. The results are compared with the manual mosaics from Part A.</p>
+      
+      <div class="mt-8">
+        <h4 class="font-medium mb-2">Auto-Mosaic 1 — Breezeway</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <img src="results_for_later/breezeway_two_mosaic2.png" class="rounded shadow fig" alt="Breezeway manual mosaic">
+            <p class="text-center text-sm text-gray-600 mt-2">Part A: Manual Stitching</p>
+          </div>
+          <div>
+            <img src="results_for_later/b4_automatic_ransac.png" class="rounded shadow fig" alt="Breezeway automatic mosaic">
+            <p class="text-center text-sm text-gray-600 mt-2">Part B: Automatic Stitching</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-10">
+        <h4 class="font-medium mb-2">Auto-Mosaic 2 — Scenic</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <img src="results_for_later/scenic_three_mosaic2.png" class="rounded shadow fig" alt="Scenic manual mosaic">
+            <p class="text-center text-sm text-gray-600 mt-2">Part A: Manual Stitching</p>
+          </div>
+          <div>
+            <img src="results_for_later/b4_scenic_auto_ransac_three.png" class="rounded shadow fig" alt="Scenic automatic mosaic">
+            <p class="text-center text-sm text-gray-600 mt-2">Part B: Automatic Stitching</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-10">
+        <h4 class="font-medium mb-2">Auto-Mosaic 3 — Whiteboard</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <img src="results_for_later/whiteboard_two_mosaic.png" class="rounded shadow fig" alt="Whiteboard manual mosaic">
+            <p class="text-center text-sm text-gray-600 mt-2">Part A: Manual Stitching</p>
+          </div>
+          <div>
+            <img src="results_for_later/b4_auto_ransac_two_whiteboard.png" class="rounded shadow fig" alt="Whiteboard automatic mosaic">
+            <p class="text-center text-sm text-gray-600 mt-2">Part B: Automatic Stitching</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+        <h3 class="text-xl font-semibold mb-3">What I Learned (Part B)</h3>
+        <p>
+            Automating the pipeline was a fantastic learning experience. The biggest takeaway was that RANSAC and this automated point selection is cool, but it also attains similar results to regular ginput; Finally, debugging the whole pipeline taught me the importance of coordinate system consistency (`(y,x)` vs. `(x,y)`) at every step.
+        </p>
+    </section>
+
   </main>
 
   <!-- Footer -->
