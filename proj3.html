@@ -330,7 +330,7 @@ I can't hold a camera steady. A Laplacian-pyramid blend could further reduce tha
     <section>
       <h3 class="text-xl font-semibold mb-3">B.3 — Feature Matching</h3>
       <p class="mb-4">
-        With descriptors for every feature point in two images, the next step is to find matching pairs. For each descriptor in the first image, I find its first and second nearest neighbors in the second image based on Euclidean distance. Following Lowe's ratio test, a match is considered valid only if the ratio of the distance to the first neighbor over the distance to the second neighbor is below a certain threshold (I used 0.8). This effectively rejects ambiguous matches where a point is almost equidistant to two different points in the other image.
+        With descriptors for every feature point in two images, the next step is to find matching pairs. For each descriptor in the first image, I find its first and second nearest neighbors in the second image based on Euclidean distance. Following Lowe's ratio test, a match is considered valid only if the ratio of the distance to the first neighbor over the distance to the second neighbor is below a certain threshold (I used 0.5). This effectively rejects ambiguous matches where a point is almost equidistant to two different points in the other image.
       </p>
       <figure class="flex flex-col items-center">
         <img src="results_for_later/b3.png" class="rounded shadow fig" alt="Feature matches between two images">
