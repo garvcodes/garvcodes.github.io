@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS180 Project 4 — Neural Radiance Fields</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      img { max-width: 100%; height: auto; page-break-inside: avoid; break-inside: avoid; }
+      section, div { page-break-inside: avoid; break-inside: avoid; }
+      header, footer, nav { display: none; }
+      body { background: white; }
+    }
+    .fig { max-width: 100%; }
+    .code {
+      background: #0b1021; color: #b9f6ca; font-size: .9rem; line-height: 1.4;
+      padding: 1rem; border-radius: .5rem; overflow-x: auto;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <header class="bg-gradient-to-r from-indigo-500 to-blue-600 text-yellow-500 p-6 shadow-md flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <img src="photos/seal.png" alt="College Seal" class="w-16 h-16 rounded">
+      <h1 class="text-2xl font-bold">CS180 Class Repository — Garv Goswami</h1>
+    </div>
+    <nav>
+      <ul class="flex space-x-6 text-lg">
+        <li><a href="index.html" class="hover:underline">Home</a></li>
+        <li><a href="proj1.html" class="hover:underline">Project 1</a></li>
+        <li><a href="proj2.html" class="hover:underline">Project 2</a></li>
+        <li><a href="proj3.html" class="hover:underline">Project 3</a></li>
+        <li><a href="proj4.html" class="hover:underline font-bold">Project 4</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-6 space-y-12">
+    <h2 class="text-3xl font-semibold text-gray-800">Project 4: Neural Radiance Fields (NeRF)</h2>
+
+    <section>
+      <h3 class="text-xl font-medium mb-2">Overview</h3>
+      <p>
+        The goal of this project was to implement Neural Radiance Fields (NeRF) from scratch. I started by calibrating my own camera using ArUco markers, fitting a simple neural network to a 2D image, and finally implementing a full volumetric rendering pipeline to reconstruct 3D scenes from 2D images. This writeup details each part of the project along with results and challenges encountered.
+      </p>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                        PART 0                                 -->
+    <!-- ============================================================ -->
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Part 0 — Camera Calibration & Data Capture</h3>
+      <p class="mb-4">
+        Before training the NeRF, I needed to capture a dataset with known camera poses. I used a grid of <strong>ArUco markers</strong> to solve the Perspective-n-Point (PnP) problem.
+      </p>
+      
+      <div class="mb-6">
+        <h4 class="font-medium mb-2">0.1: Camera Intrinsics Calibration</h4>
+        <p class="mb-2">
+          I captured 30-50 calibration images of ArUco tags from various angles and distances. Using <code>cv2.detectMarkers()</code> and <code>cv2.calibrateCamera()</code>, I computed the camera intrinsic matrix <strong>K</strong> and distortion coefficients that minimize reprojection error between observed 2D points and known 3D marker corners.
+        </p>
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <p class="text-sm font-mono">TAG_SIZE = 0.06 meters</p>
+          <p class="text-sm font-mono">Calibration RMS Error: 2.07 </p>
+          <p class="text-sm">Camera Matrix K and distortion coefficients saved to <code>camera_params.npz</code></p>
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <h4 class="font-medium mb-2">0.2: Object Scan Capture</h4>
+        <p class="mb-2">
+          I printed the aruco tag sheet (since that's what the lububu set did) and placed my object next to it. I captured 30-50 images from different 
+          angles at a consistent distance (~10-20cm), ensuring uniform lighting and avoiding motion blur. However, these images were huge and hence were downsized later. Here's an example of the image I took.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <img src="results_for_later/cube_example.jpg" class="rounded shadow fig" alt="Viser Camera Cloud 1">
+        </div>
+
+      </div>
+
+      <div class="mb-6">
+        <h4 class="font-medium mb-2">0.3: Camera Pose Estimation</h4>
+        <p class="mb-4">
+          For each captured image, I detected the ArUco tag and used <code>cv2.solvePnP()</code> to estimate the camera's rotation (rvec) and translation (tvec) relative to the tag. I converted these to camera-to-world (c2w) transformation matrices by inverting the world-to-camera transform.
+        </p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <img src="results_for_later/part_01.png" class="rounded shadow fig" alt="Viser Camera Cloud 1">
+          <img src="results_for_later/part_01_2.png" class="rounded shadow fig" alt="Viser Camera Cloud 2">
+        </div>
+        <figcaption class="text-center text-sm text-gray-600 mt-2">
+          <strong>Deliverable:</strong> Viser visualization showing camera frustums positioned around the object with their captured images
+        </figcaption>
+      </div>
+
+      <div class="mb-6">
+        <h4 class="font-medium mb-2">0.4: Undistortion & Dataset Creation</h4>
+        <p class="mb-2">
+          I undistorted all images using <code>cv2.undistort()</code> to remove lens effects (pinhole camera assumption). To eliminate black borders, I used <code>cv2.getOptimalNewCameraMatrix()</code> with <code>alpha=0</code> to crop to the valid pixel region and adjusted the principal point accordingly.
+        </p>
+        <p class="mb-2">
+          The final dataset was saved as <code>my_data.npz</code> with an 80/10/10 train/val/test split containing undistorted images, c2w matrices, and scaled focal length.
+        </p>
+      </div>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                        PART 1                                 -->
+    <!-- ============================================================ -->
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Part 1 — Fit a Neural Field to a 2D Image</h3>
+      <p class="mb-4">
+        Instead of storing an image as a grid of pixels, I trained a neural network to <strong>become the image itself</strong>. The network learns a continuous function that maps pixel coordinates <code>(x, y)</code> to RGB colors.
+      </p>
+
+      <h4 class="font-medium mb-3 mt-6">Model Architecture</h4>
+      <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+        <p class="text-sm text-gray-800 mb-3"><strong>Network Parameters:</strong></p>
+        <ul class="list-disc list-inside text-sm space-y-1">
+          <li><strong>Input:</strong> 2D coordinates (x, y) normalized to [0, 1]</li>
+          <li><strong>Positional Encoding:</strong> L=10 (expands 2D → 42D using sinusoidal basis)</li>
+          <li><strong>Hidden Layers:</strong> 4 fully connected layers, 256 neurons each, ReLU activation</li>
+          <li><strong>Output:</strong> 3 RGB values with Sigmoid activation → [0, 1]</li>
+          <li><strong>Learning Rate:</strong> 1e-2 (Adam optimizer)</li>
+          <li><strong>Batch Size:</strong> 10,000 pixels per iteration</li>
+          <li><strong>Total Iterations:</strong> 2000</li>
+        </ul>
+      </div>
+
+      <h4 class="font-medium mb-2">Why Positional Encoding?</h4>
+      <p class="mb-4 text-sm text-gray-700">
+        Standard MLPs struggle with high-frequency details. <strong>Sinusoidal Positional Encoding</strong> expands each coordinate into multiple frequency bands, allowing the network to learn both coarse structure and fine details.
+      </p>
+      <div class="code mb-4 text-xs">
+PE(x) = [x, sin(2⁰π·x), cos(2⁰π·x), ..., sin(2^(L-1)π·x), cos(2^(L-1)π·x)]
+      </div>
+
+      <h4 class="font-medium mb-4">Results</h4>
+      
+      <!-- Fox Image Results -->
+      <div class="mb-8">
+        <h5 class="font-medium mb-2">Provided Test Image (Fox)</h5>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/part_1_fox_base.png" class="rounded shadow fig" alt="Fox Training Comparison">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Left: Original, Right: Reconstruction, Bottom: PSNR
+            </figcaption>
+          </figure>
+          
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/part_01_training_progression.png" class="rounded shadow fig" alt="Fox Training Progression">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Training progression showing convergence
+            </figcaption>
+          </figure>
+        </div>
+        
+        <div class="mt-4">
+          <h5 class="font-medium mb-2">Hyperparameter Sweep (Fox)</h5>
+          <img src="results_for_later/part_01_fox_hyperparams.png" class="rounded shadow fig" alt="Fox Hyperparameter Sweep">
+          <p class="text-sm text-gray-600 mt-2">
+            <strong>Deliverable:</strong> 2×2 grid showing effect of PE levels (L=1 vs L=10) and network width (W=32 vs W=256)
+          </p>
+        </div>
+      </div>
+
+      <!-- Custom Image Results -->
+      <div class="mb-8">
+        <h5 class="font-medium mb-2">Custom Image (Elephant)</h5>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/part_01_elephant_basic_prog.png" class="rounded shadow fig" alt="Elephant Training">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Training on custom image
+            </figcaption>
+          </figure>
+          
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/part_1_elephant_iterations.png" class="rounded shadow fig" alt="Elephant Progression">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Iteration progression and PSNR curve
+            </figcaption>
+          </figure>
+        </div>
+        
+        <div class="mt-4">
+          <h5 class="font-medium mb-2">Hyperparameter Sweep (Elephant)</h5>
+          <img src="results_for_later/elephant_hyperparams.png" class="rounded shadow fig" alt="Elephant Hyperparameter Sweep">
+          <p class="text-sm text-gray-600 mt-2">
+            <strong>Deliverable:</strong> 2×2 grid showing hyperparameter effects on custom image
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-yellow-50 p-4 rounded border-l-4 border-yellow-500">
+        <h5 class="font-medium mb-2">Key Observations:</h5>
+        <ul class="list-disc list-inside text-sm space-y-1">
+          <li><strong>Low L (frequency):</strong> Blurry results, misses fine details</li>
+          <li><strong>High L:</strong> Sharp details, captures high-frequency content</li>
+          <li><strong>Narrow width:</strong> Underfitting, poor reconstruction</li>
+          <li><strong>Wide width:</strong> Better capacity, improved PSNR</li>
+        </ul>
+      </div>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                        PART 2                                 -->
+    <!-- ============================================================ -->
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Part 2 — Fit a Neural Radiance Field to a 3D Scene</h3>
+      <p class="mb-4">
+        Extending from 2D to 3D, the NeRF network now takes 5D input: 3D position <code>(x, y, z)</code> and 2D viewing direction. It outputs volume density (σ) and view-dependent RGB color.
+      </p>
+
+      <!-- 2.1: Ray Generation -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">2.1: Create Rays from Cameras</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          I implemented three core functions to convert pixels to rays:
+        </p>
+        
+        <div class="bg-gray-50 p-4 rounded mb-4 border-l-4 border-gray-400">
+          <ol class="list-decimal list-inside text-sm space-y-2">
+            <li><strong>pixel_to_camera(K, uv, s):</strong> Unprojects pixel coordinates to camera space using intrinsic matrix K</li>
+            <li><strong>transform(c2w, x_c):</strong> Transforms points from camera space to world space using c2w matrix</li>
+            <li><strong>pixel_to_ray(K, c2w, uv):</strong> Generates ray origin and normalized direction for each pixel</li>
+          </ol>
+        </div>
+        
+        <p class="text-sm text-gray-700 mb-2">
+          <strong>Key Implementation Detail:</strong> Ray origin is extracted from c2w translation component: <code>o = c2w[:3, 3]</code>. Ray direction is computed by transforming a camera-space point at depth s=1 to world space, then normalizing: <code>d = (x_w - o) / ||x_w - o||</code>
+        </p>
+      </div>
+
+      <!-- 2.2: Sampling -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">2.2: Stratified Sampling Along Rays</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          To avoid aliasing and ensure continuous coverage, I implemented <strong>stratified sampling</strong> with random jitter:
+        </p>
+        
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <ol class="list-decimal list-inside text-sm space-y-2">
+            <li>Divide depth range [near, far] into N equal bins</li>
+            <li>Compute bin boundaries as midpoints between samples</li>
+            <li>Randomly perturb sample positions within each bin (training only)</li>
+            <li>Compute 3D points: <code>pts = rays_o + rays_d × z_vals</code></li>
+          </ol>
+        </div>
+        
+        <p class="text-sm text-gray-700">
+          For Lego dataset: <strong>NEAR=2.0, FAR=6.0, N_SAMPLES=128</strong>
+        </p>
+      </div>
+
+      <!-- 2.3: Ray/Sample Visualization -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">2.3: Visualization of Rays and Samples</h4>
+        <figure class="flex flex-col items-center mb-4">
+          <img src="results_for_later/lego_frustums.png" class="rounded shadow fig" alt="Viser Ray Sampling">
+          <figcaption class="text-sm text-gray-600 mt-2">
+            <strong>Deliverable:</strong> Viser visualization showing camera frustums (black), 100 sampled rays (white lines), and stratified sample points (green dots) for the Lego dataset
+          </figcaption>
+        </figure>
+        
+        <div class="bg-green-50 p-4 rounded border-l-4 border-green-500">
+          <h5 class="font-medium mb-2">Verification Checklist:</h5>
+          <ul class="list-disc list-inside text-sm space-y-1">
+            <li>✅ All camera frustums positioned correctly around object</li>
+            <li>✅ Rays originate from camera centers and point into scene</li>
+            <li>✅ Sample points evenly distributed along rays from near to far</li>
+            <li>✅ Ray directions properly normalized</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 2.4: NeRF Architecture -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">2.4: NeRF Network Architecture</h4>
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <p class="text-sm text-gray-800 mb-3"><strong>Network Parameters:</strong></p>
+          <ul class="list-disc list-inside text-sm space-y-1">
+            <li><strong>Depth (D):</strong> 8 hidden layers</li>
+            <li><strong>Width (W):</strong> 256 neurons per layer</li>
+            <li><strong>Position Encoding:</strong> L_pos=10 (3D → 63D)</li>
+            <li><strong>Direction Encoding:</strong> L_dir=4 (3D → 27D)</li>
+            <li><strong>Skip Connection:</strong> At layer 5 (concatenate input back)</li>
+            <li><strong>Output:</strong> Density (σ with ReLU) + View-dependent RGB (Sigmoid)</li>
+          </ul>
+        </div>
+        
+        <p class="text-sm text-gray-700 mb-2">
+          <strong>Architecture Flow:</strong>
+        </p>
+        <div class="code text-xs mb-4">
+Input (x,y,z) → PE(63D) → Layers 0-4 → [Skip: concat with PE] → 
+Layers 5-7 → Branch 1: Density Head (σ)
+           → Branch 2: Feature → [concat with dir PE] → Color Head (RGB)
+        </div>
+      </div>
+
+      <!-- 2.5: Volume Rendering -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">2.5: Volume Rendering Equation</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          The core volume rendering equation aggregates density and color samples along each ray:
+        </p>
+        
+        <div class="code mb-4 text-xs">
+C(r) = Σ[i=1 to N] T_i · α_i · c_i
+
+where:
+  α_i = 1 - exp(-σ_i · Δt)     [opacity at sample i]
+  T_i = Π[j&lt;i] (1 - α_j)       [transmittance: light reaching sample i]
+  Δt = distance between samples
+        </div>
+        
+        <div class="bg-indigo-50 p-4 rounded mb-4 border-l-4 border-indigo-500">
+          <h5 class="font-medium mb-2">Implementation Steps:</h5>
+          <ol class="list-decimal list-inside text-sm space-y-2">
+            <li><strong>Compute alpha:</strong> Convert density to opacity over step size</li>
+            <li><strong>Compute transmittance:</strong> Cumulative product of (1-alpha), shifted right with T_0=1</li>
+            <li><strong>Compute weights:</strong> w_i = T_i × α_i</li>
+            <li><strong>Accumulate color:</strong> Final RGB = Σ(weights × colors)</li>
+          </ol>
+        </div>
+        
+        <p class="text-sm text-gray-700">
+          <strong>Validation:</strong> ✅ Passed numerical test with random batches (rtol=1e-4, atol=1e-4)
+        </p>
+      </div>
+
+      <!-- 2.6: Lego Training Results -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">2.6: Training on Lego Bulldozer Dataset</h4>
+        
+        <div class="bg-gray-50 p-4 rounded mb-4 border-l-4 border-gray-400">
+          <p class="text-sm font-bold mb-2">Training Hyperparameters:</p>
+          <ul class="list-disc list-inside text-sm space-y-1">
+            <li><strong>Dataset:</strong> 100 training images, 200×200 resolution</li>
+            <li><strong>Batch Size:</strong> 4096 rays per iteration</li>
+            <li><strong>Learning Rate:</strong> 5e-4 (Adam) with MultiStep scheduler</li>
+            <li><strong>Iterations:</strong> 2000-5000</li>
+            <li><strong>Near/Far:</strong> 2.0 to 6.0</li>
+            <li><strong>Samples per Ray:</strong> 128</li>
+          </ul>
+        </div>
+        
+        <!-- Training Progression -->
+        <div class="mb-6">
+        <h5 class="font-medium mb-2">Training Progression</h5>
+        <figure class="flex flex-col items-center mb-2">
+            <img src="results_for_later/lego_nerf_progress.png" class="rounded shadow fig w-full" alt="Training Progression">
+        </figure>
+        <p class="text-sm text-gray-600 text-center">
+            <strong>Deliverable:</strong> Predicted views showing progressive reconstruction quality
+        </p>
+        </div>
+        
+        <!-- PSNR and Novel View -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/lego_psnr_and_loss.png" class="rounded shadow fig" alt="Lego PSNR">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> PSNR curve on validation set (achieved 23+ dB)
+            </figcaption>
+          </figure>
+          
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/nerf_turntable.gif" class="rounded shadow fig" alt="Lego Spiral">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Novel view synthesis using test camera poses
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <!-- 2.7: Custom Data Training -->
+        <div class="mb-6">
+        <h5 class="font-medium mb-2">Training With Custom Data</h5>
+        <figure class="flex flex-col items-center mb-2">
+            <img src="results_for_later/custom_nerf_progression.png" class="rounded shadow fig w-full" alt="Training Progression">
+        </figure>
+        <p class="text-sm text-gray-600 text-center">
+            <strong>Deliverable:</strong> Predicted custom views showing progressive reconstruction quality
+        </p>
+        </div>
+        
+        <!-- PSNR and Novel View -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/custom_psnr_loss.png" class="rounded shadow fig" alt="Custom PSNR">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> PSNR curve on validation set (achieved almost 20+ dB)
+            </figcaption>
+          </figure>
+          
+          <figure class="flex flex-col items-center">
+            <img src="results_for_later/custom_turntable.gif" class="rounded shadow fig" alt="Lego Spiral">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Novel view synthesis using test camera poses
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+        
+
+        
+        <div class="bg-green-50 p-4 rounded border-l-4 border-green-500">
+          <h5 class="font-medium mb-2">Key Takeaways:</h5>
+          <ul class="list-disc list-inside text-sm space-y-1">
+            <li>I probably shouldn't have used a shiny object! I think that definitely messed stuff up</li>
+            <li>Camera calibration accuracy directly impacts reconstruction quality</li>
+            <li>Scene-specific near/far planes are critical for efficient depth sampling</li>
+            <li>View-dependent effects (specular highlights) require proper direction encoding</li>
+            <li>Longer training and higher sample counts improve fine geometric details</li>
+            <li>Focal length must be scaled proportionally when resizing images</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                   CHALLENGES & B&W                            -->
+    <!-- ============================================================ -->
+    
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Challenges & Lessons Learned</h3>
+      
+      <div class="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 mb-4">
+        <h4 class="font-bold text-red-700 mb-2">Challenge 1: Coordinate System Confusion</h4>
+        <p class="text-sm text-gray-800">
+          The provided spiral generation code assumed standard Y-up coordinates, but my cameras were positioned in negative-Y space. I fixed this by implementing a robust <code>look_at_origin()</code> function that computes correct rotation matrices regardless of camera position, ensuring cameras always point at the origin.
+        </p>
+      </div>
+
+      <div class="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 mb-4">
+        <h4 class="font-bold text-red-700 mb-2">Challenge 2: Focal Length Scaling</h4>
+        <p class="text-sm text-gray-800">
+          When training on resized images, I initially forgot to scale the focal length, causing a "zoom lens" effect where renders only showed a tiny patch. Fix: <code>focal_render = focal_train × (W_render / W_train)</code>
+        </p>
+      </div>
+
+      <div class="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 mb-4">
+        <h4 class="font-bold text-red-700 mb-2">Challenge 3: DON'T USE SHINY OBJECTS</h4>
+        <p class="text-sm text-gray-800">
+          Self explanatory — the shiny surface caused inconsistent color observations from different angles, making it hard for the network to learn a coherent representation. Next time, I'll pick a matte object!
+        </p>
+      </div>
