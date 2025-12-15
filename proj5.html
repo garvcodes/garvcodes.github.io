@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS180 Project 5 — The Power of Diffusion Models</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      img { max-width: 100%; height: auto; page-break-inside: avoid; break-inside: avoid; }
+      section, div { page-break-inside: avoid; break-inside: avoid; }
+      header, footer, nav { display: none; }
+      body { background: white; }
+    }
+    .fig { max-width: 100%; }
+    .code {
+      background: #0b1021; color: #b9f6ca; font-size: .9rem; line-height: 1.4;
+      padding: 1rem; border-radius: .5rem; overflow-x: auto;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <header class="bg-gradient-to-r from-indigo-500 to-blue-600 text-yellow-500 p-6 shadow-md flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <img src="photos/seal.png" alt="College Seal" class="w-16 h-16 rounded">
+      <h1 class="text-2xl font-bold">CS180 Class Repository — Garv Goswami</h1>
+    </div>
+    <nav>
+      <ul class="flex space-x-6 text-lg">
+        <li><a href="index.html" class="hover:underline">Home</a></li>
+        <li><a href="proj1.html" class="hover:underline">Project 1</a></li>
+        <li><a href="proj2.html" class="hover:underline">Project 2</a></li>
+        <li><a href="proj3.html" class="hover:underline">Project 3</a></li>
+        <li><a href="proj4.html" class="hover:underline">Project 4</a></li>
+        <li><a href="proj5.html" class="hover:underline font-bold">Project 5</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-6 space-y-12">
+    <h2 class="text-3xl font-semibold text-gray-800">Project 5: The Power of Diffusion Models!</h2>
+
+    <!-- Part Navigation -->
+    <div class="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-300">
+      <h3 class="text-lg font-semibold mb-3 text-indigo-900">Project Parts:</h3>
+      <div class="flex gap-4">
+        <a href="#part-a" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 transition">
+          Part A: Pretrained Diffusion Models (DeepFloyd)
+        </a>
+        <a href="#part-b" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">
+          Part B: Flow Matching from Scratch (MNIST)
+        </a>
+      </div>
+    </div>
+
+    <section>
+      <h3 class="text-xl font-medium mb-2">Overview</h3>
+      <p class="mb-4">
+        In this project, I explored the power of diffusion models through two complementary approaches:
+      </p>
+      <ul class="list-disc list-inside space-y-2 ml-4">
+        <li><strong>Part A:</strong> Using the pretrained <strong>DeepFloyd IF</strong> diffusion model to perform image manipulation tasks including iterative denoising, classifier-free guidance (CFG), image-to-image translation, inpainting, and creating visual anagrams and hybrid images.</li>
+        <li><strong>Part B:</strong> Training flow matching models from scratch on MNIST, implementing both single-step denoisers and time/class-conditioned UNets for controlled digit generation.</li>
+      </ul>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                        PART 0                                 -->
+    <!-- ============================================================ -->
+
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Part 0 — Setup and Initial Explorations</h3>
+      <p class="mb-4">
+        After setting up DeepFloyd IF and generating prompt embeddings, I experimented with generating images from text prompts
+        using different numbers of inference steps to understand how the model works.
+      </p>
+
+      <div class="mb-6">
+        <h4 class="font-medium mb-2">0.1: Text Prompt Image Generation</h4>
+        <p class="mb-2">
+          I generated images using my own creative text prompts with varying <code>num_inference_steps</code> values.
+          The quality and detail of the outputs improved with more inference steps, showing the iterative refinement process of diffusion models.
+        </p>
+
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <p class="text-sm font-mono mb-2">Random Seed: 100</p>
+          <p class="text-sm mb-2">Using the same seed ensures reproducibility across all experiments</p>
+          <p class="text-sm font-semibold mt-3 mb-1">Text Prompts Used:</p>
+          <ol class="list-decimal list-inside text-sm space-y-1 ml-2">
+            <li>"an oil painting of a sunset in berkeley"</li>
+            <li>"a photo of peter griffin's house"</li>
+            <li>"a photo of a man with a bushy moustache"</li>
+          </ol>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-2">Generated Images with 10 Inference Steps</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part0_images_10.png" class="rounded shadow fig" alt="Generated Images 10 Steps">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Three images generated with num_inference_steps=10
+              <br>Left to right: Berkeley sunset, Peter Griffin's house, Man with bushy moustache
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-2">Generated Images with 20 Inference Steps</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part0_images_20.png" class="rounded shadow fig" alt="Generated Images 20 Steps">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Three images generated with num_inference_steps=20
+              <br>Left to right: Berkeley sunset, Peter Griffin's house, Man with bushy moustache
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-2">Generated Images with 40 Inference Steps</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part0_images_40.png" class="rounded shadow fig" alt="Generated Images 40 Steps">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Three images generated with num_inference_steps=40 showing improved detail and quality
+              <br>Left to right: Berkeley sunset, Peter Griffin's house, Man with bushy moustache
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="bg-yellow-50 p-4 rounded border-l-4 border-yellow-500">
+          <h5 class="font-medium mb-2">Observations:</h5>
+          <p class="text-sm">
+            Comparing across 10, 20, and 40 inference steps shows progressive quality improvement. At 10 steps,
+            the images are rough with visible artifacts. At 20 steps, details become clearer and more coherent.
+            At 40 steps, the images show significantly improved detail, better color coherence, and more refined features.
+            The Berkeley sunset has more vibrant colors, Peter Griffin's house has clearer architectural details,
+            and the man's moustache is more realistically rendered with proper texture.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                        PART A                                 -->
+    <!-- ============================================================ -->
+
+    <section id="part-a">
+      <h2 class="text-2xl font-bold mb-6 text-indigo-700">Part A — The Power of Diffusion Models (DeepFloyd IF)</h2>
+      <h3 class="text-xl font-semibold mb-3">Part 1 — Sampling Loops</h3>
+      <p class="mb-4">
+        In this section, I implemented the core diffusion sampling loops from scratch, learning how diffusion models
+        progressively denoise images from pure noise to clean outputs.
+      </p>
+
+      <!-- 1.1: Forward Process -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.1: Implementing the Forward Process</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          The forward process adds noise to clean images according to the diffusion schedule. I implemented this using:
+        </p>
+
+        <div class="code mb-4 text-xs">
+x_t = sqrt(α_t) * x_0 + sqrt(1 - α_t) * ε
+
+where ε ~ N(0, I) is Gaussian noise
+        </div>
+
+        <p class="mb-2 text-sm text-gray-700">
+          I tested this on the Berkeley Campanile image at different noise levels t = [250, 500, 750],
+          showing progressively more noise being added.
+        </p>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Original Image</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/campanile_base.png" class="rounded shadow" style="max-width: 300px;" alt="Original Campanile">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              Original Berkeley Campanile (clean image at t=0)
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Noisy Images at Different Timesteps</h5>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.1_campanile_250.png" class="rounded shadow fig" alt="Campanile t=250">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Noisy Campanile at t=250
+              </figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.1_campanile_500.png" class="rounded shadow fig" alt="Campanile t=500">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Noisy Campanile at t=500
+              </figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.1_campanile_750.png" class="rounded shadow fig" alt="Campanile t=750">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Noisy Campanile at t=750
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1.2: Classical Denoising -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.2: Classical Denoising</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          I attempted to denoise the noisy images using classical Gaussian blur filtering. For each of the 3 noisy
+          Campanile images from Part 1.1, I applied Gaussian blur with various kernel sizes to find the best denoising results.
+          As expected, this classical approach struggles to recover the original image, especially at higher noise levels.
+        </p>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Noisy Images from Part 1.1</h5>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.1_campanile_250.png" class="rounded shadow fig" alt="Noisy t=250">
+              <figcaption class="text-sm text-gray-600 mt-2">Noisy Campanile at t=250</figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.1_campanile_500.png" class="rounded shadow fig" alt="Noisy t=500">
+              <figcaption class="text-sm text-gray-600 mt-2">Noisy Campanile at t=500</figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.1_campanile_750.png" class="rounded shadow fig" alt="Noisy t=750">
+              <figcaption class="text-sm text-gray-600 mt-2">Noisy Campanile at t=750</figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Gaussian Blur Denoised Results</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.2_classical_denoised_campanile.png" class="rounded shadow fig" alt="Classical Denoising">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Best Gaussian blur denoised results for t=[250, 500, 750]
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="bg-red-50 p-4 rounded border-l-4 border-red-500">
+          <h5 class="font-medium mb-2">Observation:</h5>
+          <p class="text-sm">
+            Gaussian blur denoising provides marginal improvement but fails to recover meaningful detail. At t=250,
+            some structure is preserved but blurred. At t=500 and t=750, the results are heavily blurred with most
+            fine details lost. This demonstrates the limitations of classical denoising methods for high noise levels.
+          </p>
+        </div>
+      </div>
+
+      <!-- 1.3: One-Step Denoising -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.3: One-Step Denoising with UNet</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          Using the pretrained DeepFloyd UNet, I performed one-step denoising by predicting and removing noise in a single pass.
+          For each timestep t, I added noise to the original Campanile image, then used the UNet to estimate and remove the noise.
+          This works significantly better than Gaussian blur, especially at lower noise levels.
+        </p>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Original Image Reference</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/campanile_base.png" class="rounded shadow" style="max-width: 300px;" alt="Original Campanile">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              Original Berkeley Campanile (for comparison)
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <h5 class="font-medium mb-2 text-sm">Noisy Images</h5>
+            <div class="grid grid-cols-1 gap-3">
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/part1.3_noised_250.png" class="rounded shadow" alt="Noisy t=250">
+                <figcaption class="text-xs text-gray-600 mt-1">Noisy at t=250</figcaption>
+              </figure>
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/part1.3_noised_500.png" class="rounded shadow" alt="Noisy t=500">
+                <figcaption class="text-xs text-gray-600 mt-1">Noisy at t=500</figcaption>
+              </figure>
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/part1.3_noised_750.png" class="rounded shadow" alt="Noisy t=750">
+                <figcaption class="text-xs text-gray-600 mt-1">Noisy at t=750</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div>
+            <h5 class="font-medium mb-2 text-sm">One-Step Denoised</h5>
+            <div class="grid grid-cols-1 gap-3">
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/part1.3_denoised_250.png" class="rounded shadow" alt="Denoised t=250">
+                <figcaption class="text-xs text-gray-600 mt-1">Denoised from t=250</figcaption>
+              </figure>
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/part1.3_denoised_500.png" class="rounded shadow" alt="Denoised t=500">
+                <figcaption class="text-xs text-gray-600 mt-1">Denoised from t=500</figcaption>
+              </figure>
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/part1.3_denoised_750.png" class="rounded shadow" alt="Denoised t=750">
+                <figcaption class="text-xs text-gray-600 mt-1">Denoised from t=750</figcaption>
+              </figure>
+            </div>
+          </div>
+        </div>
+        <p class="text-sm text-gray-600 text-center mb-4">
+          <strong>Deliverable:</strong> Side-by-side comparison of noisy images and one-step UNet denoising results at t=[250, 500, 750]
+        </p>
+
+        <div class="bg-green-50 p-4 rounded border-l-4 border-green-500">
+          <h5 class="font-medium mb-2">Observation:</h5>
+          <p class="text-sm">
+            One-step UNet denoising dramatically outperforms Gaussian blur. At t=250, the reconstruction is nearly perfect
+            with clear structural details. Even at t=500 and t=750 with much higher noise levels, the UNet recovers
+            recognizable features and structure, though some details are lost at the highest noise level.
+          </p>
+        </div>
+      </div>
+
+      <!-- 1.4: Iterative Denoising -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.4: Iterative Denoising</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          The real power of diffusion models comes from iterative denoising. I implemented the full sampling loop
+          that progressively removes noise over multiple steps, starting from i_start=10 (timestep t=90) and working down to clean images.
+        </p>
+
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <p class="text-sm text-gray-800 mb-2"><strong>Implementation Details:</strong></p>
+          <ul class="list-disc list-inside text-sm space-y-1">
+            <li><strong>Strided timesteps:</strong> [990, 960, 930, ..., 30, 0] - created by starting at 990 with stride of 30, eventually reaching 0</li>
+            <li><strong>Scheduler initialization:</strong> Called <code>stage_1.scheduler.set_timesteps(timesteps=strided_timesteps)</code></li>
+            <li><strong>Starting index:</strong> i_start=10 (corresponding to timestep t=690 in the strided sequence)</li>
+            <li><strong>Process:</strong> Iteratively denoise from t_i to t_{i+1}, gradually removing noise at each step</li>
+          </ul>
+        </div>
+
+        <div class="bg-gray-50 p-4 rounded mb-4 border-l-4 border-gray-600">
+          <p class="text-sm font-semibold mb-2">Iterative Denoising Algorithm (DDIM-style):</p>
+          <pre class="code text-xs">
+<strong>Input:</strong> noisy image x_t, timesteps T = [t_0, t_1, ..., t_n], prompt embeddings
+<strong>Output:</strong> denoised image x_0
+
+<strong>for</strong> i = i_start <strong>to</strong> len(T)-1:
+    current_t = T[i]
+
+    # Predict noise using UNet
+    noise_pred = UNet(x_t, current_t, prompt_embeds)
+
+    # Estimate clean image (x_0 prediction)
+    x_0_pred = (x_t - sqrt(1 - α_t) * noise_pred) / sqrt(α_t)
+
+    <strong>if</strong> i < len(T)-1:
+        next_t = T[i+1]
+
+        # Add variance for stochastic sampling
+        variance = get_variance(current_t, next_t)
+        noise = randn_like(x_t) * variance
+
+        # Compute x_{t-1} using DDIM update
+        x_t = sqrt(α_{t-1}) * x_0_pred +
+              sqrt(1 - α_{t-1} - variance²) * noise_pred +
+              noise
+    <strong>else</strong>:
+        x_t = x_0_pred  # Final step
+
+<strong>return</strong> x_t
+          </pre>
+          <p class="text-xs text-gray-600 mt-2">
+            This algorithm iteratively refines the image by predicting and removing noise at each timestep,
+            following the DDIM (Denoising Diffusion Implicit Models) sampling strategy.
+          </p>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Iterative Denoising Progression (Every 5th Loop)</h5>
+          <p class="text-sm text-gray-700 mb-3">
+            Starting from a noisy image at t=690, the following shows the denoising process every 5 iterations,
+            demonstrating how the image gradually becomes clearer:
+          </p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.4_iterative_denoised.png" class="rounded shadow fig" alt="Iterative Denoising">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Iterative denoising progression showing gradual noise removal every 5th denoising step
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Comparison: Iterative vs One-Step vs Gaussian Blur</h5>
+          <p class="text-sm text-gray-700 mb-3">
+            Below is a direct comparison of three denoising methods on the same noisy input (starting from i_start=10):
+          </p>
+
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.4_iterative_onestep_gaussian.png" class="rounded shadow fig" alt="Three-way Comparison">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Side-by-side comparison showing Iterative Denoising (best quality), One-Step Denoising (moderate quality), and Gaussian Blur (worst quality)
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="bg-green-50 p-4 rounded border-l-4 border-green-500">
+          <h5 class="font-medium mb-2">Key Observations:</h5>
+          <ul class="list-disc list-inside text-sm space-y-1">
+            <li><strong>Iterative Denoising:</strong> Produces the highest quality reconstruction with sharp details and minimal artifacts.
+            By gradually refining the image over multiple steps, it effectively recovers the original Campanile structure.</li>
+            <li><strong>One-Step Denoising:</strong> While significantly better than Gaussian blur, it shows more artifacts and less
+            detail than the iterative approach. The single-step prediction cannot fully recover from high noise levels.</li>
+            <li><strong>Gaussian Blur:</strong> Produces the worst results with heavy blurring and complete loss of fine details.
+            This demonstrates why neural diffusion models are necessary for effective denoising.</li>
+            <li><strong>Conclusion:</strong> The iterative approach is crucial - multiple small denoising steps dramatically
+            outperform a single large denoising step.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 1.5: Diffusion Model Sampling -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.5: Diffusion Model Sampling from Pure Noise</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          By starting from pure random noise (i_start=0) and running the iterative denoising process,
+          I generated entirely new images from the prompt "a high quality photo".
+        </p>
+
+        <figure class="flex flex-col items-center mb-4">
+          <img src="results_for_later/proj_5/results_for_later/part1.5_sampled_images.png" class="rounded shadow fig" alt="Sampled Images">
+          <figcaption class="text-sm text-gray-600 mt-2">
+            <strong>Deliverable:</strong> 5 images generated from pure noise using the diffusion model
+          </figcaption>
+        </figure>
+      </div>
+
+      <!-- 1.6: Classifier-Free Guidance (CFG) -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.6: Classifier-Free Guidance (CFG)</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          To improve image quality, I implemented Classifier-Free Guidance which combines conditional and
+          unconditional noise estimates to produce higher quality, more prompt-aligned images. CFG amplifies
+          the difference between conditional and unconditional predictions to generate more semantically accurate results.
+        </p>
+
+        <div class="bg-gray-50 p-4 rounded mb-4 border-l-4 border-gray-600">
+          <p class="text-sm font-semibold mb-2">Classifier-Free Guidance Algorithm:</p>
+          <pre class="code text-xs">
+<strong>Input:</strong> noisy image x_t, timestep t, conditional prompt p, guidance scale γ
+<strong>Output:</strong> guided noise prediction ε_cfg
+
+# Get unconditional prediction (empty prompt)
+ε_uncond = UNet(x_t, t, empty_prompt)
+
+# Get conditional prediction (with text prompt)
+ε_cond = UNet(x_t, t, prompt_embeds)
+
+# Compute CFG: extrapolate in direction of conditional prediction
+ε_cfg = ε_uncond + γ * (ε_cond - ε_uncond)
+
+<strong>return</strong> ε_cfg
+          </pre>
+          <p class="text-xs text-gray-600 mt-2">
+            <strong>Key Insight:</strong> When γ > 1, we move further in the direction pointed by the conditional
+            model relative to the unconditional baseline. Higher γ values (5-10) produce more prompt-adherent
+            but sometimes less diverse results. γ = 1 reduces to standard conditional sampling.
+          </p>
+        </div>
+
+        <div class="code mb-4 text-xs">
+<strong>CFG Formula:</strong> ε_cfg = ε_uncond + γ * (ε_cond - ε_uncond)
+
+where γ = 7 is the guidance scale used in this experiment
+        </div>
+
+        <figure class="flex flex-col items-center mb-4">
+          <img src="results_for_later/proj_5/results_for_later/part_1.6_cfg.png" class="rounded shadow fig" alt="CFG Results">
+          <figcaption class="text-sm text-gray-600 mt-2">
+            <strong>Deliverable:</strong> 5 images generated with CFG (γ=7) showing significantly improved quality
+          </figcaption>
+        </figure>
+
+        <div class="bg-yellow-50 p-4 rounded border-l-4 border-yellow-500">
+          <h5 class="font-medium mb-2">CFG Impact:</h5>
+          <p class="text-sm">
+            Images generated with CFG are much sharper, more coherent, and better aligned with the text prompt
+            compared to the basic sampling in Part 1.5.
+          </p>
+        </div>
+      </div>
+
+      <!-- 1.7: Image-to-Image Translation -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.7: Image-to-Image Translation (SDEdit)</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          I implemented the SDEdit algorithm which adds noise to real images and then denoises them using CFG,
+          effectively "projecting" them onto the natural image manifold. The more noise added (higher i_start),
+          the larger the edit. Lower i_start values preserve more of the original image structure.
+        </p>
+
+        <div class="bg-gray-50 p-4 rounded mb-4 border-l-4 border-gray-600">
+          <p class="text-sm font-semibold mb-2">SDEdit Algorithm:</p>
+          <pre class="code text-xs">
+<strong>Input:</strong> real image x_real, edit strength i_start, text prompt p, CFG scale γ
+<strong>Output:</strong> edited image x_edited
+
+# Step 1: Forward process - add noise to the image
+t_start = timesteps[i_start]
+noise = randn_like(x_real)
+x_noisy = sqrt(α_t) * x_real + sqrt(1 - α_t) * noise
+
+# Step 2: Reverse process - denoise with CFG using text prompt
+x_edited = iterative_denoise_cfg(x_noisy, i_start, prompt_embeds, γ)
+
+<strong>return</strong> x_edited
+          </pre>
+          <p class="text-xs text-gray-600 mt-2">
+            <strong>Intuition:</strong> By noising and denoising, we "project" the image onto the manifold
+            defined by the text prompt. Low i_start (less noise) preserves structure; high i_start (more noise)
+            allows larger semantic edits.
+          </p>
+        </div>
+
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <p class="text-sm text-gray-800 mb-2"><strong>Process Summary:</strong></p>
+          <ol class="list-decimal list-inside text-sm space-y-1">
+            <li>Take a real image and add noise to timestep t (via forward process)</li>
+            <li>Run iterative_denoise_cfg starting from i_start with conditional prompt "a high quality photo"</li>
+            <li>Higher i_start = more noise = larger edits; Lower i_start = less noise = more faithful to original</li>
+          </ol>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Campanile Image-to-Image Translation</h5>
+          <p class="text-sm text-gray-700 mb-3">
+            Using the conditional text prompt "a high quality photo", I applied SDEdit to the Campanile at different noise levels.
+            As i_start increases, the edits become more pronounced, gradually matching the original image closer at lower values:
+          </p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.70_campanile.png" class="rounded shadow fig" alt="Campanile SDEdit">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> SDEdit on Campanile at i_start=[1, 3, 5, 7, 10, 20] with prompt "a high quality photo"
+              <br>Images gradually look more like the original Campanile as i_start decreases
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <h5 class="font-medium mb-3 text-sm">Custom Test Images</h5>
+
+          <div class="mb-4">
+            <p class="text-sm text-gray-700 mb-2"><strong>Test Image 1: Soda Hall</strong></p>
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/part1.7_soda_image2image.png" class="rounded shadow fig" alt="Soda SDEdit">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> SDEdit on soda hall at i_start=[1, 3, 5, 7, 10, 20]
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="mb-4">
+            <p class="text-sm text-gray-700 mb-2"><strong>Test Image 2: Shark</strong></p>
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/part1.7_shark_image2image.png" class="rounded shadow fig" alt="Shark SDEdit">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> SDEdit on shark image at i_start=[1, 3, 5, 7, 10, 20]
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="bg-yellow-50 p-4 rounded border-l-4 border-yellow-500 mb-6">
+          <h5 class="font-medium mb-2">Observation:</h5>
+          <p class="text-sm">
+            The series shows a clear gradient: at i_start=1 (minimal noise), the output closely matches the original.
+            As i_start increases to 20 (maximum noise), the model has more creative freedom, producing variations
+            while still maintaining the core subject. This demonstrates the controllable editing power of SDEdit.
+          </p>
+        </div>
+
+        <h5 class="font-medium mb-3 mt-6">1.7.1: Editing Hand-Drawn and Web Images</h5>
+        <p class="mb-4 text-sm text-gray-700">
+          SDEdit works particularly well when starting with non-realistic images like sketches or cartoons,
+          projecting them onto the natural image manifold to create realistic versions.
+        </p>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-3"><strong>Web Image (Cartoon Smiley):</strong></p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/correct_smiley.png" class="rounded shadow" style="max-width: 300px;" alt="Original Smiley">
+              <figcaption class="text-sm text-gray-600 mt-2">Original cartoon smiley (input)</figcaption>
+            </figure>
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.71_smiley.png" class="rounded shadow fig" alt="Smiley SDEdit">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> SDEdit results at i_start=[1, 3, 5, 7, 10, 20]
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-3"><strong>Hand-Drawn Image (City):</strong></p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.71_handrawn_city.png" class="rounded shadow" style="max-width: 300px;" alt="Original City Sketch">
+              <figcaption class="text-sm text-gray-600 mt-2">Original hand-drawn city (input)</figcaption>
+            </figure>
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.71_city_realistic.png" class="rounded shadow fig" alt="City SDEdit">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> SDEdit results at i_start=[1, 3, 5, 7, 10, 20]
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-3"><strong>Hand-Drawn Image (House):</strong></p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.71_handrawn_house.png" class="rounded shadow" style="max-width: 300px;" alt="Original House Sketch">
+              <figcaption class="text-sm text-gray-600 mt-2">Original hand-drawn house (input)</figcaption>
+            </figure>
+            <figure class="flex flex-col items-center">
+              <img src="results_for_later/proj_5/results_for_later/part1.71_house_realistic.png" class="rounded shadow fig" alt="House SDEdit">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> SDEdit results at i_start=[1, 3, 5, 7, 10, 20]
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="bg-indigo-50 p-4 rounded border-l-4 border-indigo-500 mb-6">
+          <h5 class="font-medium mb-2">Observation:</h5>
+          <p class="text-sm">
+            Non-realistic inputs (sketches, cartoons) are transformed dramatically by SDEdit. At high i_start values (more noise),
+            the model completely reimagines the input as realistic photos while preserving the core composition. At lower i_start values,
+            some of the original artistic style is retained, creating an interesting blend between sketch and photo.
+          </p>
+        </div>
+
+        <h5 class="font-medium mb-3 mt-6">1.7.2: Inpainting</h5>
+        <p class="mb-4 text-sm text-gray-700">
+          I implemented the RePaint algorithm for inpainting, which fills in masked regions while preserving
+          the surrounding context. At each denoising step, unmasked regions are replaced with the appropriately
+          noised original image.
+        </p>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Campanile Inpainting:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.72_campanile_inpainted.png" class="rounded shadow fig" alt="Campanile Inpainted">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Original, mask, hole to fill, and inpainted result
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Hand Inpainting:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.72_inpainted_hand.png" class="rounded shadow fig" alt="Hand Inpainted">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Hand image inpainting result
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>London Scene Inpainting:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.72_inpainted_london.png" class="rounded shadow fig" alt="London Inpainted">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> London scene inpainting result
+            </figcaption>
+          </figure>
+        </div>
+
+        <h5 class="font-medium mb-3 mt-6">1.7.3: Text-Conditional Image-to-Image Translation</h5>
+        <p class="mb-4 text-sm text-gray-700">
+          By using custom text prompts instead of "a high quality photo", I could guide the image-to-image
+          translation toward specific concepts, creating creative transformations.
+        </p>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Soda Can → Wine Glass:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.73_soda_wine.png" class="rounded shadow fig" alt="Soda to Wine">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Transforming a soda can into a wine glass at different noise levels
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Shark → Submarine:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.73_shark_submarine.png" class="rounded shadow fig" alt="Shark to Submarine">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Transforming a shark into a submarine at different noise levels
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Campanile → Rocket Ship:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.73_campanile_rocket.png" class="rounded shadow fig" alt="Campanile to Rocket">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Transforming the Campanile into a rocket ship at different noise levels
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <!-- 1.8: Visual Anagrams -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.8: Visual Anagrams</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          I created optical illusions that appear as one image normally but transform into a different image
+          when flipped upside down. This is achieved by averaging noise estimates from two different prompts
+          on the original and flipped images.
+        </p>
+
+        <div class="code mb-4 text-xs">
+ε_1 = UNet(x_t, t, prompt_1)
+ε_2 = flip(UNet(flip(x_t), t, prompt_2))
+ε = (ε_1 + ε_2) / 2
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Old Man / Campfire:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.8_oldman_campfire.png" class="rounded shadow fig" alt="Old Man Campfire Anagram">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> "An oil painting of an old man" (normal) / "An oil painting of people around a campfire" (flipped)
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Face / Fountain:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.8_face_fountain.png" class="rounded shadow fig" alt="Face Fountain Anagram">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Face (normal) / Fountain (flipped)
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Car / Horse:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.8_car_horse.png" class="rounded shadow fig" alt="Car Horse Anagram">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Car (normal) / Horse (flipped)
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <!-- 1.9: Hybrid Images -->
+      <div class="mb-8">
+        <h4 class="font-medium mb-2">1.9: Hybrid Images with Diffusion</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          Inspired by Project 2, I created hybrid images using diffusion models by combining low-frequency
+          components from one prompt with high-frequency components from another.
+        </p>
+
+        <div class="code mb-4 text-xs">
+ε_low = lowpass(UNet(x_t, t, prompt_1))
+ε_high = highpass(UNet(x_t, t, prompt_2))
+ε = ε_low + ε_high
+        </div>
+
+        <div class="bg-blue-50 p-4 rounded mb-4 border-l-4 border-blue-500">
+          <p class="text-sm"><strong>Filter settings:</strong> Gaussian blur with kernel size 33, sigma 2</p>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Skull / Waterfall:</strong></p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.9_skull_waterfall.png" class="rounded shadow fig" alt="Skull Waterfall Hybrid">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> "A lithograph of a skull" (low-freq) / "A lithograph of a waterfall" (high-freq)
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="mb-6">
+          <p class="text-sm text-gray-700 mb-2"><strong>Fabric / Waves:</strong></p>
+          <p class="text-sm text-gray-600 mb-3 italic">
+            I generated 20 different images using this prompt combination in an attempt to get the best result.
+            All 20 variations are shown below for convenience. I believe the best one is the last one (bottom-right).
+          </p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/part1.9_fabric_waves.png" class="rounded shadow fig" alt="Fabric Waves Hybrid">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> 20 variations of Fabric texture (low-freq) / Ocean waves (high-freq) hybrid images
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                        PART B                                 -->
+    <!-- ============================================================ -->
+
+    <section id="part-b">
+      <h2 class="text-2xl font-bold mb-6 text-blue-700">Part B — Flow Matching from Scratch (MNIST)</h2>
+      <p class="mb-6 text-sm text-gray-700">
+        In this part, I trained my own flow matching model on MNIST from scratch, implementing both time-conditioned
+        and class-conditioned UNets for iterative denoising and generation.
+      </p>
+
+      <!-- Part 1: Single-Step Denoising -->
+      <div class="mb-12">
+        <h4 class="text-xl font-semibold mb-4">Part 1: Training a Single-Step Denoising UNet</h4>
+
+        <!-- 1.1: UNet Implementation -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">1.1: Implementing the UNet</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            I implemented a UNet denoiser consisting of downsampling and upsampling blocks with skip connections.
+            The architecture uses Conv2d, BatchNorm, GELU activations, and ConvTranspose2d operations with hidden dimension D=128.
+          </p>
+        </div>
+
+        <!-- 1.2: Training a Denoiser -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">1.2: Using the UNet to Train a Denoiser</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            To train the denoiser, I generate training pairs (z, x) where z = x + σϵ and ϵ ~ N(0, I).
+            The model learns to map noisy images back to clean MNIST digits using L2 loss.
+          </p>
+
+          <div class="mb-6">
+            <h6 class="font-medium mb-2 text-sm">Noising Process Visualization</h6>
+            <p class="mb-3 text-sm text-gray-700">
+              Visualizing the noising process with σ = [0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0] on normalized MNIST digits.
+              As σ increases, the images become progressively noisier.
+            </p>
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb1.2_noising_process_viz.png" class="rounded shadow fig" alt="Noising Process">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Visualization of noising process with varying σ values
+              </figcaption>
+            </figure>
+          </div>
+
+          <p class="mb-4 text-sm text-gray-700">
+            The denoiser was trained to map noisy images z = x + σϵ (where σ = 0.5) back to clean images x using L2 loss.
+            Training was performed on MNIST for 5 epochs with batch size 256 and Adam optimizer (lr=1e-4).
+          </p>
+
+          <!-- 1.2.1: Training -->
+          <div class="mb-6">
+            <h6 class="font-medium mb-2 text-sm">1.2.1: Training Results</h6>
+            <p class="mb-3 text-sm text-gray-700">
+              The model was trained to denoise images with noise level σ = 0.5. Below are the training results
+              showing loss progression and sample denoising performance after epochs 1 and 5.
+            </p>
+
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/part2.1.2_training_loss_curve.png" class="rounded shadow fig" alt="Training Loss Curve">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Training loss curve plotted every few iterations during the whole training process
+              </figcaption>
+            </figure>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/partb1.21_epoch1_samples.png" class="rounded shadow fig" alt="Epoch 1 Samples">
+                <figcaption class="text-sm text-gray-600 mt-2">
+                  <strong>Deliverable:</strong> Sample results on test set with noise level σ = 0.5 after epoch 1
+                </figcaption>
+              </figure>
+
+              <figure class="flex flex-col items-center">
+                <img src="results_for_later/proj_5/results_for_later/partb1.21_epoch5_samples.png" class="rounded shadow fig" alt="Epoch 5 Samples">
+                <figcaption class="text-sm text-gray-600 mt-2">
+                  <strong>Deliverable:</strong> Sample results on test set with noise level σ = 0.5 after epoch 5
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <!-- 1.2.2: Out-of-Distribution Testing -->
+          <div class="mb-6">
+            <h6 class="font-medium mb-2 text-sm">1.2.2: Out-of-Distribution Testing</h6>
+            <p class="mb-3 text-sm text-gray-700">
+              Our denoiser was trained on MNIST digits noised with σ = 0.5. Here I test how the denoiser
+              performs on different σ values that it wasn't trained for. The results show the same test set
+              images denoised at various out-of-distribution noise levels.
+            </p>
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb1.22_outofdistribution_samples.png" class="rounded shadow fig" alt="OOD Results">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Sample results on test set with out-of-distribution noise levels. Same images shown with varying σ values.
+              </figcaption>
+            </figure>
+          </div>
+
+          <!-- 1.2.3: Denoising Pure Noise -->
+          <div class="mb-6">
+            <h6 class="font-medium mb-2 text-sm">1.2.3: Denoising Pure Noise</h6>
+            <p class="mb-3 text-sm text-gray-700">
+              To make denoising a generative task, I trained the denoiser to denoise pure random Gaussian noise z ~ N(0, I)
+              into clean images x. This is like starting with a blank canvas and generating digit images from pure noise.
+              The model was trained for 5 epochs using the same architecture as in 1.2.1.
+            </p>
+
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb1.23_purenoise_loss_plot.png" class="rounded shadow fig" alt="Pure Noise Loss">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Training loss curve plotted every few iterations during the whole training process that denoises pure noise
+              </figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb1.23_purenoise_samples.png" class="rounded shadow fig" alt="Pure Noise Samples">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Sample results on pure noise after epoch 1 and epoch 5
+              </figcaption>
+            </figure>
+
+            <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500 mt-4">
+              <h6 class="font-medium mb-2">Observations:</h6>
+              <p class="text-sm">
+                The generated outputs show blurry, averaged digit patterns rather than crisp, distinct digits.
+                The results resemble a superposition or average of all digits (0-9) from the training set. This occurs
+                because with MSE (L2) loss, the model learns to predict the mean of all possible training examples
+                that could have produced the input noise. Since pure noise provides no information about which specific
+                digit to generate, the optimal MSE solution is to output the centroid of the entire MNIST dataset.
+                The model cannot distinguish which specific digit to generate from pure noise alone, so it hedges by
+                producing an averaged representation of all digits.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Part 2: Flow Matching Model -->
+      <div class="mb-12">
+        <h4 class="text-xl font-semibold mb-4">Part 2: Training a Flow Matching Model</h4>
+        <p class="mb-4 text-sm text-gray-700">
+          Moving beyond one-step denoising, I implemented flow matching for iterative denoising. The model learns
+          to predict the flow u_t(x_t, x) = x - z from noisy to clean images over multiple timesteps.
+        </p>
+
+        <!-- 2.1: Time Conditioning -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">2.1: Adding Time Conditioning to UNet</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            I added time conditioning by injecting the normalized timestep t ∈ [0,1] through FCBlocks at two points
+            in the UNet via element-wise multiplication with the feature maps.
+          </p>
+        </div>
+
+        <!-- 2.2: Training -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">2.2: Training the Time-Conditioned UNet</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            Training used D=64 hidden dimensions, batch size 64, Adam optimizer with lr=1e-2 and exponential decay (γ=0.99999).
+          </p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/partb2.2_trainingloss_plot.png" class="rounded shadow fig" alt="Time-Conditioned Loss">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Training loss curve for time-conditioned UNet
+            </figcaption>
+          </figure>
+        </div>
+
+        <!-- 2.3: Sampling -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">2.3: Sampling from the Time-Conditioned UNet</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            Sampling uses iterative denoising over multiple timesteps from pure noise to clean images.
+          </p>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/partb2.3_sampling_results.png" class="rounded shadow fig" alt="Time-Conditioned Samples">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Sampling results after 1, 5, and 10 epochs
+            </figcaption>
+          </figure>
+        </div>
+
+        <!-- 2.4: Class Conditioning -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">2.4: Adding Class-Conditioning to UNet</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            I added class conditioning using one-hot encoded class vectors with 10% dropout for classifier-free guidance.
+            Class embeddings are injected via FCBlocks alongside time embeddings.
+          </p>
+        </div>
+
+        <!-- 2.5: Training Class-Conditioned -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">2.5: Training the Class-Conditioned UNet</h5>
+          <figure class="flex flex-col items-center mb-4">
+            <img src="results_for_later/proj_5/results_for_later/partb2.5_loss_plot.png" class="rounded shadow fig" alt="Class-Conditioned Loss">
+            <figcaption class="text-sm text-gray-600 mt-2">
+              <strong>Deliverable:</strong> Training loss curve for class-conditioned UNet
+            </figcaption>
+          </figure>
+        </div>
+
+        <!-- 2.6: Sampling Class-Conditioned -->
+        <div class="mb-8">
+          <h5 class="font-medium mb-3">2.6: Sampling from the Class-Conditioned UNet</h5>
+          <p class="mb-4 text-sm text-gray-700">
+            Sampling with classifier-free guidance (γ=5.0) and class conditioning allows controlled generation of specific digits.
+            Class-conditioning enables faster convergence, which is why we only train for 10 epochs instead of the longer training
+            required for the time-only conditioned model.
+          </p>
+
+          <div class="mb-6">
+            <h6 class="font-medium mb-2 text-sm">Training Loss (With Scheduler)</h6>
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb2.6_loss_with_scheduler.png" class="rounded shadow fig" alt="Class-Conditioned Training Loss">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                Training loss curve for class-conditioned UNet with exponential LR scheduler
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="mb-6">
+            <h6 class="font-medium mb-2 text-sm">Sampling Results Across Training</h6>
+            <p class="mb-3 text-sm text-gray-700">
+              Below are sampling results showing 4 instances of each digit (0-9) after 1, 5, and 10 epochs of training.
+              The model progressively improves, generating clearer and more realistic MNIST digits.
+            </p>
+
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb2.6_epoch1_samples.png" class="rounded shadow fig" alt="Epoch 1 Samples">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Sampling results after epoch 1 (4 instances per digit 0-9)
+              </figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb2.6_epoch5_samples.png" class="rounded shadow fig" alt="Epoch 5 Samples">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Sampling results after epoch 5 (4 instances per digit 0-9)
+              </figcaption>
+            </figure>
+
+            <figure class="flex flex-col items-center mb-4">
+              <img src="results_for_later/proj_5/results_for_later/partb2.6_epoch10_samples.png" class="rounded shadow fig" alt="Epoch 10 Samples">
+              <figcaption class="text-sm text-gray-600 mt-2">
+                <strong>Deliverable:</strong> Sampling results after epoch 10 (4 instances per digit 0-9)
+              </figcaption>
+            </figure>
+          </div>
+
+          <hr class="my-6 border-gray-300">
+
+          <div class="mb-6">
+            <h6 class="font-medium mb-3 text-sm">Training Without the Learning Rate Scheduler</h6>
+            <p class="mb-4 text-sm text-gray-700">
+              Can we simplify training by removing the exponential learning rate scheduler? Below are results showing
+              performance after removing the scheduler while maintaining comparable quality.
+            </p>
+
+            <div class="mb-4">
+              <h6 class="font-medium mb-2 text-sm">Loss Comparison</h6>
+              <figure class="flex flex-col items-center mb-4">
+                <img src="results_for_later/proj_5/results_for_later/partb2.6_loss_noscheduler.png" class="rounded shadow fig" alt="No Scheduler Loss">
+                <figcaption class="text-sm text-gray-600 mt-2">
+                  <strong>Deliverable:</strong> Training loss curve without exponential LR scheduler
+                </figcaption>
+              </figure>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="font-medium mb-2 text-sm">Sampling Results (No Scheduler)</h6>
+              <figure class="flex flex-col items-center mb-4">
+                <img src="results_for_later/proj_5/results_for_later/partb2.6_noscheduler_epoch1_samples.png" class="rounded shadow fig" alt="No Scheduler Epoch 1">
+                <figcaption class="text-sm text-gray-600 mt-2">
+                  <strong>Deliverable:</strong> Sampling results after epoch 1 (without scheduler)
+                </figcaption>
+              </figure>
+
+              <figure class="flex flex-col items-center mb-4">
+                <img src="results_for_later/proj_5/results_for_later/partb2.6_noscheduler_epoch5_samples.png" class="rounded shadow fig" alt="No Scheduler Epoch 5">
+                <figcaption class="text-sm text-gray-600 mt-2">
+                  <strong>Deliverable:</strong> Sampling results after epoch 5 (without scheduler)
+                </figcaption>
+              </figure>
+
+              <figure class="flex flex-col items-center mb-4">
+                <img src="results_for_later/proj_5/results_for_later/partb2.6_noscheduler_epoch10_samples.png" class="rounded shadow fig" alt="No Scheduler Epoch 10">
+                <figcaption class="text-sm text-gray-600 mt-2">
+                  <strong>Deliverable:</strong> Sampling results after epoch 10 (without scheduler)
+                </figcaption>
+              </figure>
+            </div>
+
+            <div class="bg-green-50 p-4 rounded border-l-4 border-green-500 mt-4">
+              <h6 class="font-medium mb-2">What I Did to Compensate:</h6>
+              <p class="text-sm">
+                To compensate for removing the exponential learning rate scheduler, I made several adjustments:
+                <br><br>
+                <strong>1. Learning Rate Selection:</strong> I used a carefully tuned constant learning rate (lr=1e-3)
+                that balances fast initial convergence with stability in later epochs.
+                <br><br>
+                <strong>2. Gradient Clipping:</strong> I added gradient clipping (max_norm=1.0) to prevent gradient explosions
+                and maintain training stability throughout all epochs.
+                <br><br>
+                <strong>3. Batch Size Adjustment:</strong> I slightly increased the batch size to smooth out gradient estimates
+                and reduce training variance.
+                <br><br>
+                <strong>Results:</strong> The model achieves comparable performance to the scheduled version. The loss curve
+                shows steady convergence, and the generated samples are of similar quality. Training without the scheduler
+                is simpler and more interpretable, proving that we can maintain performance with proper hyperparameter tuning.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="my-12 border-t-2 border-gray-300">
+
+    <!-- ============================================================ -->
+    <!--                   REFLECTIONS                                 -->
+    <!-- ============================================================ -->
+
+    <section>
+      <h3 class="text-xl font-semibold mb-3">Key Takeaways & Reflections</h3>
+
+      <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 mb-4">
+        <h4 class="font-bold text-green-700 mb-2">What I Learned</h4>
+        <ul class="list-disc list-inside text-sm space-y-2 text-gray-800">
+          <li><strong>Iterative refinement is powerful:</strong> Diffusion models work by gradually denoising images over many steps,
+          which produces much better results than one-step denoising</li>
+          <li><strong>Classifier-Free Guidance is crucial:</strong> CFG dramatically improves image quality and prompt alignment
+          by extrapolating away from the unconditional prediction</li>
+          <li><strong>Versatility beyond generation:</strong> The same diffusion framework can be adapted for inpainting,
+          image editing, and creating optical illusions</li>
+          <li><strong>Noise schedules matter:</strong> The amount of noise added controls the strength of edits in
+          image-to-image translation</li>
+          <li><strong>Composing noise estimates:</strong> Averaging or combining noise estimates from different prompts/transformations
+          enables creative applications like visual anagrams and hybrid images</li>
+        </ul>
+      </div>
+
+      <div class="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 mb-4">
+        <h4 class="font-bold text-yellow-700 mb-2">Challenges Encountered</h4>
+        <ul class="list-disc list-inside text-sm space-y-2 text-gray-800">
+          <li><strong>GPU memory management:</strong> Had to carefully use <code>torch.no_grad()</code> and manage tensor
+          devices/dtypes to avoid running out of memory</li>
+          <li><strong>Stochastic results:</strong> Some techniques like inpainting and visual anagrams required multiple runs
+          to get good results due to randomness in the sampling process</li>
+          <li><strong>Hyperparameter tuning:</strong> Finding the right guidance scale, noise levels, and filter parameters
+          required experimentation</li>
+          <li><strong>Understanding the math:</strong> The diffusion equations and variance schedules took time to fully understand
+          and implement correctly</li>
+        </ul>
+      </div>
+
+      <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+        <h4 class="font-bold text-blue-700 mb-2">Favorite Results</h4>
+        <p class="text-sm text-gray-800">
+          My favorite results were the visual anagrams, especially the "old man / campfire" illusion. It's fascinating
+          how the model can create coherent images that transform into completely different scenes when flipped.
+          The hybrid images were also impressive, showing that diffusion models can create the same multi-scale
+          effects we achieved in Project 2 with traditional frequency domain techniques.
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="bg-gray-200 text-center p-4 mt-12 text-sm text-gray-600">
+    © 2025 Garv Goswami | CS180
+  </footer>
+</body>
+</html>
